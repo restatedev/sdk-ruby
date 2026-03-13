@@ -116,6 +116,20 @@ module Restate
       nil
     end
 
+    # Create a sleep timer without blocking. Returns a handle (Integer).
+    sig { params(seconds: Numeric).returns(Integer) }
+    def create_sleep(seconds)
+      millis = (seconds * 1000).to_i
+      @vm.sys_sleep(millis)
+    end
+
+    # Block until a previously created handle completes.
+    sig { params(handle: Integer).returns(NilClass) }
+    def resolve_handle(handle)
+      poll_and_take(handle)
+      nil
+    end
+
     # ── Durable run (side effect) ──
 
     sig do
@@ -264,6 +278,64 @@ module Restate
                       input_serde: JsonSerde)
       object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers,
                   input_serde: input_serde) # rubocop:disable Layout/HashAlignment
+    end
+
+    # ── Generic calls (raw bytes, no serde) ──
+
+    sig do
+      params(
+        service: String,
+        handler: String,
+        arg: String,
+        key: T.nilable(String),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).returns(T.untyped)
+    end
+    def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
+      call_handle = @vm.sys_call(
+        service: service, handler: handler, parameter: arg.b,
+        key: key, idempotency_key: idempotency_key, headers: headers
+      )
+      poll_and_take(call_handle.result_handle)
+    end
+
+    sig do
+      params(
+        service: String,
+        handler: String,
+        arg: String,
+        key: T.nilable(String),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).returns(Integer)
+    end
+    def generic_call_handle(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
+      call_handle = @vm.sys_call(
+        service: service, handler: handler, parameter: arg.b,
+        key: key, idempotency_key: idempotency_key, headers: headers
+      )
+      call_handle.result_handle
+    end
+
+    sig do
+      params(
+        service: String,
+        handler: String,
+        arg: String,
+        key: T.nilable(String),
+        delay: T.nilable(Numeric),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).returns(T.untyped)
+    end
+    def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
+      delay_ms = delay ? (delay * 1000).to_i : nil
+      invocation_id_handle = @vm.sys_send(
+        service: service, handler: handler, parameter: arg.b,
+        key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
+      )
+      poll_and_take(invocation_id_handle)
     end
 
     # ── Request metadata ──
