@@ -192,7 +192,7 @@ module Restate
 
     sig { params(handle: Integer, failure: T.untyped).void }
     def propose_run_completion_failure(handle, failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
       @vm.propose_run_completion_failure(handle, native_failure)
     end
 
@@ -221,7 +221,7 @@ module Restate
 
     sig { params(failure: T.untyped).void }
     def sys_write_output_failure(failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
       @vm.sys_write_output_failure(native_failure)
     end
 

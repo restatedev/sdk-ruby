@@ -1,0 +1,23 @@
+exclusions:
+  # Services requiring awakeables (not yet implemented in Ruby SDK)
+  "AwakeableHolder": "*"
+  "BlockAndWaitWorkflow": "*"
+  "CancelTestRunner": "*"
+  "CancelTestBlockingService": "*"
+  "KillTestRunner": "*"
+  "KillTestSingleton": "*"
+
+  # Services requiring generic_call/generic_send (not yet implemented)
+  "Proxy": "*"
+
+  # Services requiring promises, awakeables, and advanced combinators
+  "ObjectInterpreterL0": "*"
+  "ObjectInterpreterL1": "*"
+  "ObjectInterpreterL2": "*"
+  "ServiceInterpreterHelper": "*"
+  "VirtualObjectCommandInterpreter": "*"
+
+  # Handlers requiring features not yet implemented
+  "TestUtilsService":
+    - "sleepConcurrently"     # requires concurrent sleep handles
+    - "cancelInvocation"      # requires cancel_invocation API

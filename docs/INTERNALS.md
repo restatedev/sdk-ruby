@@ -315,6 +315,84 @@ curl --http2-prior-knowledge http://localhost:9080/health
 - **Restate can't reach Falcon**: If Restate runs in Docker, bind Falcon to `0.0.0.0` not
   `localhost`, and use the host machine's IP in the registration URI.
 
+## Test Services (`test-services/`)
+
+The `test-services/` directory contains integration test services ported from the Python SDK's
+`test-services/`. These are designed to run against the
+[sdk-test-suite](https://github.com/restatedev/sdk-test-suite) (JVM-based e2e verification runner).
+
+### Structure
+
+```
+test-services/
+├── Dockerfile             # Multi-stage build (compile native ext → run Falcon)
+├── Gemfile                # Points to SDK via path: ".."
+├── config.ru              # Rack entry point
+├── services.rb            # Service registry (supports SERVICES env var filtering)
+├── entrypoint.sh          # Docker entrypoint (runs Falcon)
+├── exclusions.yaml        # Excluded services/handlers for test suite
+├── .env                   # Default env vars
+└── services/
+    ├── counter.rb         # Counter VirtualObject (reset, get, add, addThenFail)
+    ├── list_object.rb     # ListObject VirtualObject (append, get, clear)
+    ├── map_object.rb      # MapObject VirtualObject (set, get, clearAll)
+    ├── failing.rb         # Failing VirtualObject (terminal errors, retry policies)
+    ├── non_determinism.rb # NonDeterministic VirtualObject (deliberate non-determinism)
+    └── test_utils.rb      # TestUtilsService (echo, headers, rawEcho, side effects)
+```
+
+### Ported Services
+
+| Service | Type | Handlers |
+|---------|------|----------|
+| Counter | VirtualObject | reset, get, add, addThenFail |
+| ListObject | VirtualObject | append, get, clear |
+| MapObject | VirtualObject | set, get, clearAll |
+| Failing | VirtualObject | terminallyFailingCall, callTerminallyFailingCall, failingCallWithEventualSuccess, terminallyFailingSideEffect, sideEffectSucceedsAfterGivenAttempts, sideEffectFailsAfterGivenAttempts |
+| NonDeterministic | VirtualObject | setDifferentKey, backgroundInvokeWithDifferentTargets, callDifferentMethod, eitherSleepOrCall |
+| TestUtilsService | Service | echo, uppercaseEcho, echoHeaders, rawEcho, countExecutedSideEffects |
+
+### Not Yet Ported (missing SDK features)
+
+| Service | Blocked On |
+|---------|------------|
+| AwakeableHolder | `ctx.awakeable`, `ctx.resolve_awakeable` |
+| BlockAndWaitWorkflow | `ctx.promise` |
+| CancelTestRunner/BlockingService | `ctx.awakeable`, cancellation |
+| KillTestRunner/Singleton | `ctx.awakeable` |
+| Proxy | `ctx.generic_call`, `ctx.generic_send` |
+| Interpreter (L0/L1/L2), Helper | Awakeables, promises, combinators |
+| VirtualObjectCommandInterpreter | Awakeables, promises, combinators |
+| TestUtilsService.sleepConcurrently | Concurrent sleep handles |
+| TestUtilsService.cancelInvocation | `ctx.cancel_invocation` |
+
+### Running Locally
+
+```bash
+cd test-services
+bundle install
+bundle exec falcon serve --bind http://localhost:9080
+```
+
+### Running with Docker
+
+The Dockerfile must be built from the **repo root** (it copies the SDK source):
+
+```bash
+docker build -f test-services/Dockerfile -t restate-ruby-test-services .
+docker run -p 9080:9080 restate-ruby-test-services
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `SERVICES` | Comma-separated list of service names to register (default: all) |
+| `E2E_REQUEST_SIGNING_ENV` | Identity signing key for request verification |
+| `PORT` | Listen port (default: 9080) |
+| `RESTATE_CORE_LOG` | Rust core log level (default: debug) |
+| `RESTATE_LOGGING` | Alias for `RESTATE_CORE_LOG` (used by e2e runner) |
+
 ## Important Learnings
 
 ### 1. `read_partial` vs `read` on Falcon's `rack.input`
