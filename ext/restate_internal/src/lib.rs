@@ -840,7 +840,7 @@ fn rb_exponential_retry_config_new(
 
 // ── Module init ──
 
-#[magnus::init]
+#[magnus::init(name = "restate_internal")]
 fn init(ruby: &Ruby) -> Result<(), Error> {
     use tracing_subscriber::EnvFilter;
 
