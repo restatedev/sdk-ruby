@@ -146,26 +146,49 @@ module Restate
       vm = VMWrapper.new(request_headers)
       status, response_headers = vm.get_response_head
 
-      # Read request body and feed to VM
-      input_body = env["rack.input"]
-      if input_body
-        body_content = input_body.read
-        if body_content && !body_content.empty?
-          vm.notify_input(body_content.b)
-        end
-      end
-      vm.notify_input_closed
+      # Streaming response body — output chunks are sent to Restate as they're
+      # produced. This is critical for BidiStream mode where the VM needs output
+      # acknowledged before it can make further progress.
+      output_queue = Async::Queue.new
+      send_output = ->(chunk) { output_queue.enqueue(chunk) }
 
-      # Execute the handler
+      # Input queue bridges the HTTP body reader and the handler's progress loop.
+      input_queue = Async::Queue.new
+
+      # Read request body chunks and feed to VM until ready to execute,
+      # then continue feeding remaining chunks via the input queue.
+      rack_input = env["rack.input"]
+      ready = false
+      if rack_input
+        # Feed chunks until the VM has enough to start execution
+        while (chunk = rack_input.read_partial(16384))
+          vm.notify_input(chunk.b) unless chunk.empty?
+          if vm.is_ready_to_execute
+            ready = true
+            break
+          end
+        end
+        vm.notify_input_closed unless ready
+      end
+
       invocation = vm.sys_input
 
-      # For non-streaming (HTTP/1.1 request-response), we use a simple buffer
-      output_chunks = []
-      send_output = ->(chunk) { output_chunks << chunk }
-
-      # Create a dummy input queue (input already fully read)
-      input_queue = Queue.new
-      input_queue << :eof
+      # Spawn a background task to continue reading remaining input
+      if ready
+        Async do
+          begin
+            while (chunk = rack_input.read_partial(16384))
+              input_queue.enqueue(chunk.b) unless chunk.empty?
+            end
+          rescue => e
+            LOGGER.error("Input reader error: #{e.inspect}")
+          ensure
+            input_queue.enqueue(:eof)
+          end
+        end
+      else
+        input_queue.enqueue(:eof)
+      end
 
       context = ServerContext.new(
         vm: vm,
@@ -175,25 +198,50 @@ module Restate
         input_queue: input_queue
       )
 
-      begin
-        context.enter
-      rescue DisconnectedError
-        # Client disconnected
-      rescue => e
-        LOGGER.error("Exception in handler: #{e.inspect}")
+      # Spawn the handler as an async task so the response body can stream
+      # output concurrently.
+      Async do
+        begin
+          context.enter
+        rescue DisconnectedError
+          # Client disconnected
+        rescue => e
+          LOGGER.error("Exception in handler: #{e.inspect}")
+        end
+
+        # Drain remaining output from VM
+        loop do
+          chunk = vm.take_output
+          break if chunk.nil? || chunk.empty?
+          output_queue.enqueue(chunk)
+        end
+
+        # Signal end of output
+        output_queue.enqueue(nil)
       end
 
-      # Collect remaining output
-      loop do
-        chunk = vm.take_output
-        break unless chunk
-        output_chunks << chunk
-      end
+      body = StreamingBody.new(output_queue)
 
       merged_headers = response_headers.map { |pair| [pair[0], pair[1]] }.to_h
       merged_headers["x-restate-server"] = X_RESTATE_SERVER
 
-      [status, merged_headers, output_chunks]
+      [status, merged_headers, body]
+    end
+
+    # Rack 3 streaming body that yields chunks from an Async::Queue.
+    # Terminates when nil is dequeued.
+    class StreamingBody
+      def initialize(queue)
+        @queue = queue
+      end
+
+      def each
+        loop do
+          chunk = @queue.dequeue
+          break if chunk.nil?
+          yield chunk
+        end
+      end
     end
 
     def extract_headers(env)

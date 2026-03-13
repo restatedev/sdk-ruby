@@ -261,8 +261,11 @@ module Restate
     end
 
     def flush_output
-      output = @vm.take_output
-      @send_output.call(output) if output
+      loop do
+        output = @vm.take_output
+        break if output.nil? || output.empty?
+        @send_output.call(output)
+      end
     end
 
     # ── Run execution ──
