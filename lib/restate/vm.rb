@@ -1,0 +1,216 @@
+# frozen_string_literal: true
+
+require_relative "restate_internal"
+
+module Restate
+  # Ruby-side data types for VM results
+  Invocation = Struct.new(:invocation_id, :random_seed, :headers, :input_buffer, :key, keyword_init: true)
+  Failure = Struct.new(:code, :message, :stacktrace, keyword_init: true)
+  NotReady = Class.new
+  Suspended = Class.new
+
+  NOT_READY = NotReady.new.freeze
+  SUSPENDED = Suspended.new.freeze
+  CANCEL_HANDLE = Internal::CANCEL_NOTIFICATION_HANDLE
+
+  # Progress loop result types
+  DoProgressAnyCompleted = Class.new
+  DoProgressReadFromInput = Class.new
+  DoProgressCancelSignalReceived = Class.new
+  DoWaitPendingRun = Class.new
+
+  DO_PROGRESS_ANY_COMPLETED = DoProgressAnyCompleted.new.freeze
+  DO_PROGRESS_READ_FROM_INPUT = DoProgressReadFromInput.new.freeze
+  DO_PROGRESS_CANCEL_SIGNAL_RECEIVED = DoProgressCancelSignalReceived.new.freeze
+  DO_WAIT_PENDING_RUN = DoWaitPendingRun.new.freeze
+
+  DoProgressExecuteRun = Struct.new(:handle, keyword_init: true)
+
+  # Exponential retry configuration for run
+  RunRetryConfig = Struct.new(
+    :initial_interval, :max_attempts, :max_duration,
+    :max_interval, :interval_factor,
+    keyword_init: true
+  )
+
+  # Wraps the native Restate::Internal::VM, mapping native types to Ruby types.
+  class VMWrapper
+    def initialize(headers)
+      @vm = Internal::VM.new(headers)
+    end
+
+    def get_response_head
+      result = @vm.get_response_head
+      [result.status_code, result.headers]
+    end
+
+    def notify_input(buf)
+      @vm.notify_input(buf)
+    end
+
+    def notify_input_closed
+      @vm.notify_input_closed
+    end
+
+    def notify_error(error, stacktrace = nil)
+      @vm.notify_error(error, stacktrace)
+    end
+
+    def take_output
+      @vm.take_output
+    end
+
+    def is_ready_to_execute
+      @vm.is_ready_to_execute
+    end
+
+    def is_completed(handle)
+      @vm.is_completed(handle)
+    end
+
+    def do_progress(handles)
+      result = @vm.do_progress(handles)
+      map_do_progress(result)
+    rescue Internal::VMError => e
+      e
+    end
+
+    def take_notification(handle)
+      result = @vm.take_notification(handle)
+      map_notification(result)
+    rescue Internal::VMError => e
+      e
+    end
+
+    def sys_input
+      inp = @vm.sys_input
+      headers = inp.headers.map { |h| [h.key, h.value] }
+      Invocation.new(
+        invocation_id: inp.invocation_id,
+        random_seed: inp.random_seed,
+        headers: headers,
+        input_buffer: inp.input.b,
+        key: inp.key
+      )
+    end
+
+    def sys_get_state(name)
+      @vm.sys_get_state(name)
+    end
+
+    def sys_get_state_keys
+      @vm.sys_get_state_keys
+    end
+
+    def sys_set_state(name, value)
+      @vm.sys_set_state(name, value)
+    end
+
+    def sys_clear_state(name)
+      @vm.sys_clear_state(name)
+    end
+
+    def sys_clear_all_state
+      @vm.sys_clear_all_state
+    end
+
+    def sys_sleep(millis, name = nil)
+      # Rust side always expects 2 args: (millis, name_or_nil)
+      @vm.sys_sleep(millis, name)
+    end
+
+    def sys_call(service:, handler:, parameter:, key: nil, idempotency_key: nil, headers: nil)
+      # Rust side expects 6 args: (service, handler, buffer, key_or_nil, idem_key_or_nil, headers_or_nil)
+      hdr_array = headers&.map { |k, v| [k, v] }
+      @vm.sys_call(service, handler, parameter, key, idempotency_key, hdr_array)
+    end
+
+    def sys_send(service:, handler:, parameter:, key: nil, delay: nil, idempotency_key: nil, headers: nil)
+      # Rust side expects 7 args: (service, handler, buffer, key_or_nil, delay_or_nil, idem_key_or_nil, headers_or_nil)
+      hdr_array = headers&.map { |k, v| [k, v] }
+      @vm.sys_send(service, handler, parameter, key, delay, idempotency_key, hdr_array)
+    end
+
+    def sys_run(name)
+      @vm.sys_run(name)
+    end
+
+    def propose_run_completion_success(handle, output)
+      @vm.propose_run_completion_success(handle, output)
+    end
+
+    def propose_run_completion_failure(handle, failure)
+      native_failure = Internal::Failure.new(failure.code, failure.message)
+      @vm.propose_run_completion_failure(handle, native_failure)
+    end
+
+    def propose_run_completion_transient(handle, failure:, attempt_duration_ms:, config:)
+      native_failure = Internal::Failure.new(failure.code, failure.message, failure.stacktrace)
+      native_config = Internal::ExponentialRetryConfig.new(
+        config.initial_interval, config.max_attempts,
+        config.max_duration, config.max_interval,
+        config.interval_factor
+      )
+      @vm.propose_run_completion_failure_transient(handle, native_failure, attempt_duration_ms, native_config)
+    end
+
+    def sys_write_output_success(output)
+      @vm.sys_write_output_success(output)
+    end
+
+    def sys_write_output_failure(failure)
+      native_failure = Internal::Failure.new(failure.code, failure.message)
+      @vm.sys_write_output_failure(native_failure)
+    end
+
+    def sys_end
+      @vm.sys_end
+    end
+
+    def is_replaying
+      @vm.is_replaying
+    end
+
+    private
+
+    def map_do_progress(result)
+      case result
+      when Internal::Suspended
+        SUSPENDED
+      when Internal::DoProgressAnyCompleted
+        DO_PROGRESS_ANY_COMPLETED
+      when Internal::DoProgressReadFromInput
+        DO_PROGRESS_READ_FROM_INPUT
+      when Internal::DoProgressExecuteRun
+        DoProgressExecuteRun.new(handle: result.handle)
+      when Internal::DoProgressCancelSignalReceived
+        DO_PROGRESS_CANCEL_SIGNAL_RECEIVED
+      when Internal::DoWaitForPendingRun
+        DO_WAIT_PENDING_RUN
+      else
+        raise "Unknown progress type: #{result.class}"
+      end
+    end
+
+    def map_notification(result)
+      case result
+      when Internal::Suspended
+        SUSPENDED
+      when NilClass
+        NOT_READY
+      when Internal::Void
+        nil
+      when String
+        # Could be bytes (success) or invocation_id string.
+        # The native layer returns RString for both.
+        result
+      when Internal::Failure
+        Failure.new(code: result.code, message: result.message)
+      when Internal::StateKeys
+        result.keys
+      else
+        raise "Unknown notification type: #{result.class}"
+      end
+    end
+  end
+end

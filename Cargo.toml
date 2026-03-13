@@ -1,0 +1,3 @@
+[workspace]
+members = ["ext/restate_internal"]
+resolver = "2"
