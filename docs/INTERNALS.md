@@ -221,6 +221,100 @@ vm.take_output → output_queue.enqueue(chunk) ··· output_queue.dequeue → y
 └──────────────────────────┘  └──────────────────────────┘
 ```
 
+## Manual Testing
+
+### Prerequisites
+
+1. **Restate runtime** must be running (default ingress on `:8080`, admin API on `:9070`).
+2. **Native extension** must be compiled: `make compile` (or `bundle exec rake compile`).
+
+### Start the Example Server
+
+```bash
+cd examples
+bundle exec falcon serve --bind http://localhost:9080
+```
+
+Use `-n 1` for a single worker (easier debugging).
+
+### Register the Deployment
+
+The `restate` CLI may not be on PATH in all environments. Use the admin API directly:
+
+```bash
+curl http://localhost:9070/deployments \
+  -H 'content-type: application/json' \
+  -d '{"uri": "http://localhost:9080"}'
+```
+
+To force re-registration after code changes (restarts the Falcon server first):
+
+```bash
+curl http://localhost:9070/deployments \
+  -H 'content-type: application/json' \
+  -d '{"uri": "http://localhost:9080", "force": true}'
+```
+
+### Invoke Handlers
+
+**Greeter (stateless service):**
+```bash
+# Simple greeting — exercises ctx.run
+curl localhost:8080/Greeter/greet \
+  -H 'content-type: application/json' -d '"World"'
+# → "Hello, World!"
+
+# Greeting with cross-service call — exercises ctx.object_call, ctx.get, ctx.set
+curl localhost:8080/Greeter/greetAndRemember \
+  -H 'content-type: application/json' -d '"Alice"'
+# → "Hello, Alice! (greeted 1 times)"
+```
+
+**Counter (virtual object — requires key in URL):**
+```bash
+curl localhost:8080/Counter/my-counter/add \
+  -H 'content-type: application/json' -d '3'
+# → {"oldValue":0,"newValue":3}
+
+curl localhost:8080/Counter/my-counter/get \
+  -H 'content-type: application/json' -d 'null'
+# → 3
+
+curl localhost:8080/Counter/my-counter/reset \
+  -H 'content-type: application/json' -d 'null'
+# → null
+```
+
+**Signup (workflow — requires key in URL):**
+```bash
+curl localhost:8080/Signup/user1/run \
+  -H 'content-type: application/json' -d '"user@example.com"' \
+  -H 'idempotency-key: signup-1'
+# → {"userId":"user_user_example_com","email":"user@example.com"}
+
+curl localhost:8080/Signup/user1/status \
+  -H 'content-type: application/json' -d 'null'
+# → "completed"
+```
+
+### Health Check
+
+```bash
+# Direct to Falcon (HTTP/2, needs special curl flag or go through Restate)
+curl --http2-prior-knowledge http://localhost:9080/health
+# → {"status":"ok"}
+```
+
+### Troubleshooting
+
+- **Falcon not responding to curl**: Falcon uses HTTP/2. Use `--http2-prior-knowledge` or go
+  through the Restate ingress (port 8080) which handles protocol negotiation.
+- **Worker crashes on startup**: Check Falcon logs (JSON to stdout). Common cause: Sorbet runtime
+  `NameError` from eager sig evaluation — ensure all types referenced in sigs are loaded.
+- **Port stuck after crash**: `lsof -ti :9080 | xargs kill -9`
+- **Restate can't reach Falcon**: If Restate runs in Docker, bind Falcon to `0.0.0.0` not
+  `localhost`, and use the host machine's IP in the registration URI.
+
 ## Important Learnings
 
 ### 1. `read_partial` vs `read` on Falcon's `rack.input`
