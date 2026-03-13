@@ -77,17 +77,17 @@ module Restate
 
     # ── State operations ──
 
-    sig { params(name: String).returns(T.untyped) }
-    def get(name)
+    sig { params(name: String, serde: T.untyped).returns(T.untyped) }
+    def get(name, serde: JsonSerde)
       handle = @vm.sys_get_state(name)
       poll_and_take(handle) do |raw|
-        raw.nil? ? nil : JsonSerde.deserialize(raw)
+        raw.nil? ? nil : serde.deserialize(raw)
       end
     end
 
-    sig { params(name: String, value: T.untyped).void }
-    def set(name, value)
-      @vm.sys_set_state(name, JsonSerde.serialize(value).b)
+    sig { params(name: String, value: T.untyped, serde: T.untyped).void }
+    def set(name, value, serde: JsonSerde)
+      @vm.sys_set_state(name, serde.serialize(value).b)
     end
 
     sig { params(name: String).void }
@@ -118,14 +118,21 @@ module Restate
 
     # ── Durable run (side effect) ──
 
-    sig { params(name: String, action: T.proc.returns(T.untyped)).returns(T.untyped) }
-    def run(name, &action)
+    sig do
+      params(
+        name: String,
+        serde: T.untyped,
+        retry_policy: T.nilable(RunRetryPolicy),
+        action: T.proc.returns(T.untyped)
+      ).returns(T.untyped)
+    end
+    def run(name, serde: JsonSerde, retry_policy: nil, &action)
       handle = @vm.sys_run(name)
 
-      @run_coros_to_execute[handle] = -> { execute_run(handle, action) }
+      @run_coros_to_execute[handle] = -> { execute_run(handle, action, serde, retry_policy) }
 
       poll_and_take(handle) do |raw|
-        raw.nil? ? nil : JsonSerde.deserialize(raw)
+        raw.nil? ? nil : serde.deserialize(raw)
       end
     end
 
@@ -138,17 +145,20 @@ module Restate
         arg: T.untyped,
         key: T.nilable(String),
         idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
+        headers: T.nilable(T::Hash[String, String]),
+        input_serde: T.untyped,
+        output_serde: T.untyped
       ).returns(T.untyped)
     end
-    def service_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
-      parameter = JsonSerde.serialize(arg)
+    def service_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
+                     input_serde: JsonSerde, output_serde: JsonSerde)
+      parameter = input_serde.serialize(arg)
       call_handle = @vm.sys_call(
         service: service, handler: handler, parameter: parameter.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       poll_and_take(call_handle.result_handle) do |raw|
-        raw.nil? ? nil : JsonSerde.deserialize(raw)
+        raw.nil? ? nil : output_serde.deserialize(raw)
       end
     end
 
@@ -160,11 +170,13 @@ module Restate
         key: T.nilable(String),
         delay: T.nilable(Numeric),
         idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
+        headers: T.nilable(T::Hash[String, String]),
+        input_serde: T.untyped
       ).void
     end
-    def service_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
-      parameter = JsonSerde.serialize(arg)
+    def service_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
+                     input_serde: JsonSerde)
+      parameter = input_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
       @vm.sys_send(
         service: service, handler: handler, parameter: parameter.b,
@@ -179,17 +191,20 @@ module Restate
         key: String,
         arg: T.untyped,
         idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
+        headers: T.nilable(T::Hash[String, String]),
+        input_serde: T.untyped,
+        output_serde: T.untyped
       ).returns(T.untyped)
     end
-    def object_call(service, handler, key, arg, idempotency_key: nil, headers: nil)
-      parameter = JsonSerde.serialize(arg)
+    def object_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
+                    input_serde: JsonSerde, output_serde: JsonSerde)
+      parameter = input_serde.serialize(arg)
       call_handle = @vm.sys_call(
         service: service, handler: handler, parameter: parameter.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       poll_and_take(call_handle.result_handle) do |raw|
-        raw.nil? ? nil : JsonSerde.deserialize(raw)
+        raw.nil? ? nil : output_serde.deserialize(raw)
       end
     end
 
@@ -201,11 +216,13 @@ module Restate
         arg: T.untyped,
         delay: T.nilable(Numeric),
         idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
+        headers: T.nilable(T::Hash[String, String]),
+        input_serde: T.untyped
       ).void
     end
-    def object_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil)
-      parameter = JsonSerde.serialize(arg)
+    def object_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
+                    input_serde: JsonSerde)
+      parameter = input_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
       @vm.sys_send(
         service: service, handler: handler, parameter: parameter.b,
@@ -220,11 +237,15 @@ module Restate
         key: String,
         arg: T.untyped,
         idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
+        headers: T.nilable(T::Hash[String, String]),
+        input_serde: T.untyped,
+        output_serde: T.untyped
       ).returns(T.untyped)
     end
-    def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil)
-      object_call(service, handler, key, arg, idempotency_key: idempotency_key, headers: headers)
+    def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
+                      input_serde: JsonSerde, output_serde: JsonSerde)
+      object_call(service, handler, key, arg, idempotency_key: idempotency_key, headers: headers,
+                  input_serde: input_serde, output_serde: output_serde) # rubocop:disable Layout/HashAlignment
     end
 
     sig do
@@ -235,11 +256,14 @@ module Restate
         arg: T.untyped,
         delay: T.nilable(Numeric),
         idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
+        headers: T.nilable(T::Hash[String, String]),
+        input_serde: T.untyped
       ).void
     end
-    def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil)
-      object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers)
+    def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
+                      input_serde: JsonSerde)
+      object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers,
+                  input_serde: input_serde) # rubocop:disable Layout/HashAlignment
     end
 
     # ── Request metadata ──
@@ -362,12 +386,19 @@ module Restate
 
     # ── Run execution ──
 
-    sig { params(handle: Integer, action: T.proc.returns(T.untyped)).void }
-    def execute_run(handle, action)
+    sig do
+      params(
+        handle: Integer,
+        action: T.proc.returns(T.untyped),
+        serde: T.untyped,
+        retry_policy: T.nilable(RunRetryPolicy)
+      ).void
+    end
+    def execute_run(handle, action, serde, retry_policy)
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       begin
         result = action.call
-        buffer = JsonSerde.serialize(result)
+        buffer = serde.serialize(result)
         @vm.propose_run_completion_success(handle, buffer.b)
       rescue TerminalError => e
         failure = Failure.new(code: e.status_code, message: e.message)
@@ -382,7 +413,13 @@ module Restate
           message: e.inspect,
           stacktrace: e.backtrace&.join("\n")
         )
-        config = RunRetryConfig.new
+        config = RunRetryConfig.new(
+          initial_interval: retry_policy&.initial_interval,
+          max_attempts: retry_policy&.max_attempts,
+          max_duration: retry_policy&.max_duration,
+          max_interval: retry_policy&.max_interval,
+          interval_factor: retry_policy&.interval_factor
+        )
         @vm.propose_run_completion_transient(
           handle,
           failure: failure,

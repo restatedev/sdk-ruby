@@ -28,6 +28,13 @@ module Restate
 
   DoProgressExecuteRun = Struct.new(:handle, keyword_init: true)
 
+  # User-facing retry policy for ctx.run
+  RunRetryPolicy = Struct.new(
+    :initial_interval, :max_attempts, :max_duration,
+    :max_interval, :interval_factor,
+    keyword_init: true
+  )
+
   # Exponential retry configuration for run
   RunRetryConfig = Struct.new(
     :initial_interval, :max_attempts, :max_duration,

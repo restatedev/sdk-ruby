@@ -55,7 +55,7 @@ module Restate
     end
 
     # Build and return the Rack-compatible application.
-    sig { returns(Server) }
+    sig { returns(T.untyped) }
     def app
       require_relative 'server'
       Server.new(self)
