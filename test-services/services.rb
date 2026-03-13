@@ -17,7 +17,7 @@ ALL_SERVICES = {
 }.freeze
 
 def services_named(names)
-  names.map { |name| ALL_SERVICES.fetch(name) }
+  names.filter_map { |name| ALL_SERVICES[name] }
 end
 
 def test_services
