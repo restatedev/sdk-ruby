@@ -1,0 +1,34 @@
+# Rust
+/target/
+ext/restate_internal/target/
+
+# Ruby
+*.gem
+*.bundle
+*.so
+*.dll
+*.o
+*.a
+/pkg/
+/tmp/
+/lib/restate/restate_internal.*
+
+# Bundler
+/.bundle/
+/vendor/bundle/
+Gemfile.lock
+
+# RSpec
+/coverage/
+/.rspec_status
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swatch
+*~
+
+# OS
+.DS_Store
+Thumbs.db
