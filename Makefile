@@ -1,4 +1,4 @@
-.PHONY: build compile test clean fmt check install
+.PHONY: build compile test clean fmt check install typecheck lint lint-fix
 
 # Build the native extension and compile
 build: compile
@@ -9,6 +9,17 @@ compile:
 # Run tests
 test: compile
 	bundle exec rake spec
+
+# Type checking
+typecheck:
+	bundle exec srb tc
+
+# Linting
+lint:
+	bundle exec rubocop
+
+lint-fix:
+	bundle exec rubocop -A
 
 # Check Rust code compiles
 check:
@@ -31,5 +42,5 @@ install:
 gem: compile
 	gem build restate-sdk.gemspec
 
-# Run everything (install, compile, test)
-all: install compile test
+# Run everything (install, compile, test, typecheck, lint)
+all: install compile test typecheck lint

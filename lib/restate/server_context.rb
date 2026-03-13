@@ -1,8 +1,9 @@
+# typed: true
 # frozen_string_literal: true
 
-require "async"
-require "async/queue"
-require "logger"
+require 'async'
+require 'async/queue'
+require 'logger'
 
 module Restate
   # The core execution context for a Restate handler invocation.
@@ -15,21 +16,29 @@ module Restate
   #   - The HTTP input reader (a separate Async task) feeds chunks into @input_queue.
   #   - Output chunks are written directly to the streaming response body.
   class ServerContext
-    LOGGER = Logger.new($stdout, progname: "Restate::ServerContext")
+    extend T::Sig
 
-    attr_reader :vm, :invocation
+    LOGGER = T.let(Logger.new($stdout, progname: 'Restate::ServerContext'), Logger)
 
+    sig { returns(VMWrapper) }
+    attr_reader :vm
+
+    sig { returns(T.untyped) }
+    attr_reader :invocation
+
+    sig { params(vm: VMWrapper, handler: T.untyped, invocation: T.untyped, send_output: T.untyped, input_queue: Async::Queue).void }
     def initialize(vm:, handler:, invocation:, send_output:, input_queue:)
-      @vm = vm
-      @handler = handler
-      @invocation = invocation
-      @send_output = send_output
-      @input_queue = input_queue
-      @run_coros_to_execute = {}
+      @vm = T.let(vm, VMWrapper)
+      @handler = T.let(handler, T.untyped)
+      @invocation = T.let(invocation, T.untyped)
+      @send_output = T.let(send_output, T.untyped)
+      @input_queue = T.let(input_queue, Async::Queue)
+      @run_coros_to_execute = T.let({}, T::Hash[Integer, T.untyped])
     end
 
     # ── Main entry point ──
 
+    sig { void }
     def enter
       in_buffer = @invocation.input_buffer
       out_buffer = Restate.invoke_handler(handler: @handler, ctx: self, in_buffer: in_buffer)
@@ -43,14 +52,14 @@ module Restate
       # These are expected internal control flow exceptions; do nothing.
     rescue DisconnectedError
       raise
-    rescue => e
+    rescue StandardError => e
       # Walk the cause chain for TerminalError or internal exceptions
-      cause = e
-      handled = false
+      cause = T.let(e, T.nilable(Exception))
+      handled = T.let(false, T::Boolean)
       while cause
         if cause.is_a?(TerminalError)
-          failure = Failure.new(code: cause.status_code, message: cause.message)
-          @vm.sys_write_output_failure(failure)
+          f = Failure.new(code: cause.status_code, message: cause.message)
+          @vm.sys_write_output_failure(f)
           @vm.sys_end
           handled = true
           break
@@ -68,6 +77,7 @@ module Restate
 
     # ── State operations ──
 
+    sig { params(name: String).returns(T.untyped) }
     def get(name)
       handle = @vm.sys_get_state(name)
       poll_and_take(handle) do |raw|
@@ -75,18 +85,22 @@ module Restate
       end
     end
 
+    sig { params(name: String, value: T.untyped).void }
     def set(name, value)
       @vm.sys_set_state(name, JsonSerde.serialize(value).b)
     end
 
+    sig { params(name: String).void }
     def clear(name)
       @vm.sys_clear_state(name)
     end
 
+    sig { void }
     def clear_all
       @vm.sys_clear_all_state
     end
 
+    sig { returns(T.untyped) }
     def state_keys
       handle = @vm.sys_get_state_keys
       poll_and_take(handle)
@@ -94,6 +108,7 @@ module Restate
 
     # ── Sleep ──
 
+    sig { params(seconds: Numeric).returns(NilClass) }
     def sleep(seconds)
       millis = (seconds * 1000).to_i
       handle = @vm.sys_sleep(millis)
@@ -103,9 +118,8 @@ module Restate
 
     # ── Durable run (side effect) ──
 
+    sig { params(name: String, action: T.proc.returns(T.untyped)).returns(T.untyped) }
     def run(name, &action)
-      raise ArgumentError, "Block required for run" unless block_given?
-
       handle = @vm.sys_run(name)
 
       @run_coros_to_execute[handle] = -> { execute_run(handle, action) }
@@ -117,6 +131,16 @@ module Restate
 
     # ── Service calls ──
 
+    sig do
+      params(
+        service: String,
+        handler: String,
+        arg: T.untyped,
+        key: T.nilable(String),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).returns(T.untyped)
+    end
     def service_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
       parameter = JsonSerde.serialize(arg)
       call_handle = @vm.sys_call(
@@ -128,6 +152,17 @@ module Restate
       end
     end
 
+    sig do
+      params(
+        service: String,
+        handler: String,
+        arg: T.untyped,
+        key: T.nilable(String),
+        delay: T.nilable(Numeric),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).void
+    end
     def service_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
       parameter = JsonSerde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
@@ -137,6 +172,16 @@ module Restate
       )
     end
 
+    sig do
+      params(
+        service: String,
+        handler: String,
+        key: String,
+        arg: T.untyped,
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).returns(T.untyped)
+    end
     def object_call(service, handler, key, arg, idempotency_key: nil, headers: nil)
       parameter = JsonSerde.serialize(arg)
       call_handle = @vm.sys_call(
@@ -148,6 +193,17 @@ module Restate
       end
     end
 
+    sig do
+      params(
+        service: String,
+        handler: String,
+        key: String,
+        arg: T.untyped,
+        delay: T.nilable(Numeric),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).void
+    end
     def object_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil)
       parameter = JsonSerde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
@@ -157,16 +213,38 @@ module Restate
       )
     end
 
+    sig do
+      params(
+        service: String,
+        handler: String,
+        key: String,
+        arg: T.untyped,
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).returns(T.untyped)
+    end
     def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil)
       object_call(service, handler, key, arg, idempotency_key: idempotency_key, headers: headers)
     end
 
+    sig do
+      params(
+        service: String,
+        handler: String,
+        key: String,
+        arg: T.untyped,
+        delay: T.nilable(Numeric),
+        idempotency_key: T.nilable(String),
+        headers: T.nilable(T::Hash[String, String])
+      ).void
+    end
     def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil)
       object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers)
     end
 
     # ── Request metadata ──
 
+    sig { returns(T.untyped) }
     def request
       Request.new(
         id: @invocation.invocation_id,
@@ -175,6 +253,7 @@ module Restate
       )
     end
 
+    sig { returns(String) }
     def key
       @invocation.key
     end
@@ -184,11 +263,18 @@ module Restate
     # ── Progress loop ──
 
     # Polls until the given handle(s) complete, then takes the notification.
-    def poll_and_take(handle, &transform)
+    sig do
+      params(
+        handle: Integer,
+        block: T.nilable(T.proc.params(arg0: T.untyped).returns(T.untyped))
+      ).returns(T.untyped)
+    end
+    def poll_and_take(handle, &block)
       poll_or_cancel([handle]) unless @vm.is_completed(handle)
-      must_take_notification(handle, &transform)
+      must_take_notification(handle, &block)
     end
 
+    sig { params(handles: T::Array[Integer]).void }
     def poll_or_cancel(handles)
       loop do
         flush_output
@@ -197,28 +283,26 @@ module Restate
         if response.is_a?(Exception)
           LOGGER.error("Exception in do_progress: #{response}")
           flush_output
-          raise InternalError.new
+          raise InternalError
         end
 
         case response
         when Suspended
           flush_output
-          raise SuspendedError.new
+          raise SuspendedError
         when DoProgressAnyCompleted
           return
         when DoProgressCancelSignalReceived
-          raise TerminalError.new("cancelled", status_code: 409)
+          raise TerminalError.new('cancelled', status_code: 409)
         when DoProgressExecuteRun
           fn = @run_coros_to_execute.delete(response.handle)
           raise "Missing run coroutine for handle #{response.handle}" unless fn
 
           # Spawn child task for the run action
           Async do
-            begin
-              fn.call
-            ensure
-              @input_queue.enqueue(:run_completed)
-            end
+            fn.call
+          ensure
+            @input_queue.enqueue(:run_completed)
           end
         when DoWaitPendingRun, DoProgressReadFromInput
           # Wait for input from the HTTP body reader or a run completion signal
@@ -230,7 +314,7 @@ module Restate
           when :eof
             @vm.notify_input_closed
           when :disconnected
-            raise DisconnectedError.new
+            raise DisconnectedError
           when String
             @vm.notify_input(event)
           end
@@ -238,38 +322,47 @@ module Restate
       end
     end
 
-    def must_take_notification(handle)
+    sig do
+      params(
+        handle: Integer,
+        block: T.nilable(T.proc.params(arg0: T.untyped).returns(T.untyped))
+      ).returns(T.untyped)
+    end
+    def must_take_notification(handle, &block)
       result = @vm.take_notification(handle)
 
       if result.is_a?(Exception)
         flush_output
         LOGGER.error("Exception in take_notification: #{result}")
-        raise InternalError.new
+        raise InternalError
       end
 
       case result
       when Suspended
         flush_output
-        raise SuspendedError.new
+        raise SuspendedError
       when NotReady
         raise "Unexpected NotReady for handle #{handle}"
       when Failure
         raise TerminalError.new(result.message, status_code: result.code)
       else
-        block_given? ? yield(result) : result
+        block ? yield(result) : result
       end
     end
 
+    sig { void }
     def flush_output
       loop do
         output = @vm.take_output
         break if output.nil? || output.empty?
+
         @send_output.call(output)
       end
     end
 
     # ── Run execution ──
 
+    sig { params(handle: Integer, action: T.proc.returns(T.untyped)).void }
     def execute_run(handle, action)
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       begin
@@ -281,7 +374,7 @@ module Restate
         @vm.propose_run_completion_failure(handle, failure)
       rescue SuspendedError, InternalError
         raise
-      rescue => e
+      rescue StandardError => e
         elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
         attempt_duration_ms = (elapsed * 1000).to_i
         failure = Failure.new(

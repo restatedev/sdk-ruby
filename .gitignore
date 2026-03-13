@@ -29,6 +29,11 @@ Gemfile.lock
 *.swatch
 *~
 
+# Sorbet (auto-generated RBIs)
+sorbet/rbi/gems/
+sorbet/rbi/dsl/
+sorbet/rbi/annotations/
+
 # OS
 .DS_Store
 Thumbs.db

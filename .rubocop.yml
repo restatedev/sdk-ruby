@@ -1,0 +1,101 @@
+plugins:
+  - rubocop-sorbet
+
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - "ext/**/*"
+    - ".bundle/**/*"
+    - "sorbet/rbi/**/*"
+    - "examples/**/*"
+    - "spec/**/*"
+    - "vendor/**/*"
+
+Layout/LineLength:
+  Max: 120
+
+Style/Documentation:
+  Enabled: false
+
+# Mirror the native Rust API naming (is_* methods come from the Rust VM)
+Naming/PredicatePrefix:
+  AllowedMethods:
+    - is_ready_to_execute
+    - is_completed
+    - is_replaying
+
+# get_response_head mirrors the native Rust API
+Naming/AccessorMethodName:
+  Exclude:
+    - "lib/restate/vm.rb"
+
+# Short keyword args like vm: are clear in context
+Naming/MethodParameterName:
+  AllowedNames:
+    - vm
+
+# Complex files need relaxed metrics
+Metrics/ClassLength:
+  Exclude:
+    - "lib/restate/server.rb"
+    - "lib/restate/server_context.rb"
+    - "lib/restate/vm.rb"
+
+Metrics/MethodLength:
+  Exclude:
+    - "lib/restate/discovery.rb"
+    - "lib/restate/handler.rb"
+    - "lib/restate/server.rb"
+    - "lib/restate/server_context.rb"
+    - "lib/restate/service.rb"
+    - "lib/restate/virtual_object.rb"
+    - "lib/restate/vm.rb"
+    - "lib/restate/workflow.rb"
+
+Metrics/AbcSize:
+  Exclude:
+    - "lib/restate/server.rb"
+    - "lib/restate/server_context.rb"
+    - "lib/restate/vm.rb"
+
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "lib/restate/server.rb"
+    - "lib/restate/server_context.rb"
+    - "lib/restate/vm.rb"
+
+Metrics/PerceivedComplexity:
+  Exclude:
+    - "lib/restate/server.rb"
+    - "lib/restate/server_context.rb"
+    - "lib/restate/vm.rb"
+
+Metrics/BlockLength:
+  Exclude:
+    - "lib/restate/server.rb"
+    - "lib/restate/server_context.rb"
+
+Metrics/ParameterLists:
+  Exclude:
+    - "lib/restate/server_context.rb"
+    - "lib/restate/virtual_object.rb"
+    - "lib/restate/vm.rb"
+
+# The default branch handles the empty accept header case
+Lint/DuplicateBranch:
+  Exclude:
+    - "lib/restate/server.rb"
+
+# Sorbet sigs require named block parameters, conflicts with anonymous forwarding
+Naming/BlockForwarding:
+  Enabled: false
+
+Style/ArgumentsForwarding:
+  Enabled: false
+
+# These marker classes are intentionally empty (used as type tags)
+Lint/EmptyClass:
+  Exclude:
+    - "lib/restate/vm.rb"
