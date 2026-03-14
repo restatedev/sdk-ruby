@@ -480,16 +480,21 @@ When user code calls `ctx.run('name') { ... }`:
 
 ### Background Runs (`background: true`)
 
-`ctx.run('name', background: true) { ... }` has the same durable semantics as a normal `run`
-but offloads the user's block to a real OS Thread. This prevents CPU-intensive work from
-blocking the fiber event loop (which would starve all other concurrent handler invocations).
+With Async 2.x and Ruby 3.1+, the Fiber Scheduler intercepts most blocking I/O automatically
+(Net::HTTP, TCPSocket, file reads, etc.), so `ctx.run` already handles I/O-bound work without
+blocking the event loop. `background: true` is only needed for CPU-heavy native extensions
+that release the GVL (e.g., image processing with libvips, crypto with OpenSSL).
+
+`ctx.run('name', background: true) { ... }` offloads the block to `BackgroundPool`, a shared
+fixed-size thread pool (default 8 workers, configurable via `RESTATE_BACKGROUND_POOL_SIZE`).
 
 The mechanism uses `offload_to_thread`:
 1. Creates an `IO.pipe`
-2. Spawns a `Thread` that runs the action and closes the write end on completion
-3. The fiber calls `read_io.read(1)`, which yields the fiber in Async context
-4. When the thread closes the pipe, the fiber resumes
-5. VM calls (`propose_run_completion_*`) happen on the fiber, preserving thread safety
+2. Submits the action to the `BackgroundPool` thread pool
+3. The pool worker runs the action and closes the write end on completion
+4. The fiber calls `read_io.read(1)`, which yields the fiber in Async context
+5. When the worker closes the pipe, the fiber resumes
+6. VM calls (`propose_run_completion_*`) happen on the fiber, preserving thread safety
 
 ### `run_sync`
 

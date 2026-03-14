@@ -170,12 +170,18 @@ end
 
 **Background thread** (`background: true`):
 
-For CPU-intensive work that would block the fiber event loop, pass `background: true`.
-The block runs in a real OS Thread, keeping the event loop responsive for other concurrent
-handler invocations. Works with both `run` and `run_sync`:
+**Background thread pool** (`background: true`):
+
+With Async and Ruby 3.1+, the Fiber Scheduler automatically intercepts most blocking I/O
+(`Net::HTTP`, `TCPSocket`, file I/O, etc.) and yields the fiber — so `run` already handles
+I/O-bound work without blocking the event loop.
+
+Pass `background: true` only for **CPU-heavy native extensions that release the GVL** (e.g.,
+image processing, crypto). The block runs in a shared thread pool (default 8 workers,
+configurable via `RESTATE_BACKGROUND_POOL_SIZE`):
 
 ```ruby
-result = ctx.run_sync('heavy', background: true) { expensive_calculation() }
+result = ctx.run_sync('resize-image', background: true) { process_image(data) }
 ```
 
 ### State Operations

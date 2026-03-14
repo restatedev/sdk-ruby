@@ -690,9 +690,14 @@ module Restate
       end
     end
 
-    # Run a block in a real OS thread, yielding the current fiber until it completes.
-    # Uses IO.pipe as a cross-thread signal: the fiber waits on the read end (yielding to
-    # the Async event loop), and the thread closes the write end when done.
+    # Run a block in an OS thread from a shared pool, yielding the current fiber
+    # until it completes. Uses IO.pipe to yield the fiber to the Async event loop
+    # while the thread does work.
+    #
+    # Note: With Async 2.x and Ruby 3.1+, the Fiber Scheduler already intercepts
+    # most blocking I/O (Net::HTTP, TCPSocket, etc.) and yields the fiber
+    # automatically. +background: true+ is only needed for CPU-heavy native
+    # extensions that release the GVL (e.g., image processing, crypto).
     sig { params(action: T.proc.returns(T.untyped)).returns(T.untyped) }
     def offload_to_thread(action)
       read_io, write_io = IO.pipe
@@ -700,7 +705,7 @@ module Restate
       error = T.let(nil, T.nilable(Exception))
 
       begin
-        thread = Thread.new do
+        BackgroundPool.submit do
           result = action.call
         rescue Exception => e # rubocop:disable Lint/RescueException
           error = e
@@ -708,10 +713,9 @@ module Restate
           write_io.close
         end
 
-        # Yields the fiber in Async context; resumes when the thread closes write_io.
+        # Yields the fiber in Async context; resumes when the worker closes write_io.
         read_io.read(1)
         read_io.close
-        thread.join
 
         raise error if error
 
@@ -719,6 +723,50 @@ module Restate
       ensure
         read_io.close unless read_io.closed?
         write_io.close unless write_io.closed?
+      end
+    end
+
+    # A simple fixed-size thread pool for background: true runs.
+    # Avoids creating a new Thread per call (~1ms + ~1MB stack each).
+    # Workers pull jobs from a shared Queue and execute them.
+    module BackgroundPool
+      extend T::Sig
+
+      @queue = T.let(Queue.new, Queue)
+      @workers = T.let([], T::Array[Thread])
+      @mutex = T.let(Mutex.new, Mutex)
+      @size = T.let(0, Integer)
+
+      POOL_SIZE = T.let(Integer(ENV.fetch('RESTATE_BACKGROUND_POOL_SIZE', 8)), Integer)
+
+      module_function
+
+      # Submit a block to be executed by a pool worker.
+      sig { params(block: T.proc.void).void }
+      def submit(&block)
+        ensure_started
+        @queue.push(block)
+      end
+
+      sig { void }
+      def ensure_started
+        return if @size >= POOL_SIZE
+
+        @mutex.synchronize do
+          while @size < POOL_SIZE
+            @size += 1
+            worker = Thread.new do
+              Kernel.loop do
+                job = @queue.pop
+                break if job == :shutdown
+
+                job.call
+              end
+            end
+            worker.name = "restate-bg-#{@size}"
+            @workers << worker
+          end
+        end
       end
     end
   end
