@@ -35,6 +35,11 @@ TEST_UTILS.handler('countExecutedSideEffects') do |ctx, increments|
   invoked_side_effects
 end
 
+TEST_UTILS.handler('cancelInvocation') do |ctx, invocation_id|
+  ctx.cancel_invocation(invocation_id)
+  nil
+end
+
 TEST_UTILS.handler('sleepConcurrently') do |ctx, millis_list|
   handles = millis_list.map { |ms| ctx.create_sleep(ms / 1000.0) }
   handles.each { |h| ctx.resolve_handle(h) }

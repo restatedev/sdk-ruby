@@ -8,6 +8,11 @@ require_relative 'services/failing'
 require_relative 'services/non_determinism'
 require_relative 'services/test_utils'
 require_relative 'services/proxy'
+require_relative 'services/awakeable_holder'
+require_relative 'services/cancel_test'
+require_relative 'services/kill_test'
+require_relative 'services/block_and_wait_workflow'
+require_relative 'services/virtual_object_command_interpreter'
 
 ALL_SERVICES = {
   'Counter' => COUNTER,
@@ -16,7 +21,14 @@ ALL_SERVICES = {
   'Failing' => FAILING,
   'NonDeterministic' => NON_DETERMINISTIC,
   'TestUtilsService' => TEST_UTILS,
-  'Proxy' => PROXY
+  'Proxy' => PROXY,
+  'AwakeableHolder' => AWAKEABLE_HOLDER,
+  'CancelTestRunner' => CANCEL_TEST_RUNNER,
+  'CancelTestBlockingService' => CANCEL_TEST_BLOCKING_SERVICE,
+  'KillTestRunner' => KILL_TEST_RUNNER,
+  'KillTestSingleton' => KILL_TEST_SINGLETON,
+  'BlockAndWaitWorkflow' => BLOCK_AND_WAIT_WORKFLOW,
+  'VirtualObjectCommandInterpreter' => VIRTUAL_OBJECT_COMMAND_INTERPRETER
 }.freeze
 
 def services_named(names)

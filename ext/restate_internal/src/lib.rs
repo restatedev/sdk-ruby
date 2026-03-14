@@ -716,6 +716,92 @@ impl RbVM {
     fn is_replaying(&self) -> bool {
         self.vm.borrow().is_replaying()
     }
+
+    // ── Awakeables ──
+
+    fn sys_awakeable(&self) -> Result<Value, Error> {
+        let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
+        let (id, handle) = self
+            .vm
+            .borrow_mut()
+            .sys_awakeable()
+            .map_err(core_error_to_magnus)?;
+        let ary = ruby.ary_new_capa(2);
+        ary.push(ruby.str_new(&id))?;
+        ary.push(u32::from(handle))?;
+        Ok(ary.as_value())
+    }
+
+    fn sys_complete_awakeable_success(&self, id: String, buffer: RString) -> Result<(), Error> {
+        let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
+        self.vm
+            .borrow_mut()
+            .sys_complete_awakeable(id, NonEmptyValue::Success(bytes.into()), Default::default())
+            .map_err(core_error_to_magnus)
+    }
+
+    fn sys_complete_awakeable_failure(&self, id: String, failure: &RbFailure) -> Result<(), Error> {
+        self.vm
+            .borrow_mut()
+            .sys_complete_awakeable(
+                id,
+                NonEmptyValue::Failure(failure.clone().into()),
+                Default::default(),
+            )
+            .map_err(core_error_to_magnus)
+    }
+
+    // ── Promises ──
+
+    fn sys_get_promise(&self, key: String) -> Result<u32, Error> {
+        self.vm
+            .borrow_mut()
+            .sys_get_promise(key)
+            .map(Into::into)
+            .map_err(core_error_to_magnus)
+    }
+
+    fn sys_peek_promise(&self, key: String) -> Result<u32, Error> {
+        self.vm
+            .borrow_mut()
+            .sys_peek_promise(key)
+            .map(Into::into)
+            .map_err(core_error_to_magnus)
+    }
+
+    fn sys_complete_promise_success(&self, key: String, buffer: RString) -> Result<u32, Error> {
+        let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
+        self.vm
+            .borrow_mut()
+            .sys_complete_promise(key, NonEmptyValue::Success(bytes.into()), Default::default())
+            .map(Into::into)
+            .map_err(core_error_to_magnus)
+    }
+
+    fn sys_complete_promise_failure(
+        &self,
+        key: String,
+        failure: &RbFailure,
+    ) -> Result<u32, Error> {
+        self.vm
+            .borrow_mut()
+            .sys_complete_promise(
+                key,
+                NonEmptyValue::Failure(failure.clone().into()),
+                Default::default(),
+            )
+            .map(Into::into)
+            .map_err(core_error_to_magnus)
+    }
+
+    // ── Cancel invocation ──
+
+    fn sys_cancel_invocation(&self, target_invocation_id: String) -> Result<(), Error> {
+        self.vm
+            .borrow_mut()
+            .sys_cancel_invocation(target_invocation_id)
+            .map_err(core_error_to_magnus)
+    }
 }
 
 // ── Identity Verifier ──
@@ -965,6 +1051,29 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     )?;
     vm_class.define_method("sys_end", method!(RbVM::sys_end, 0))?;
     vm_class.define_method("is_replaying", method!(RbVM::is_replaying, 0))?;
+    vm_class.define_method("sys_awakeable", method!(RbVM::sys_awakeable, 0))?;
+    vm_class.define_method(
+        "sys_complete_awakeable_success",
+        method!(RbVM::sys_complete_awakeable_success, 2),
+    )?;
+    vm_class.define_method(
+        "sys_complete_awakeable_failure",
+        method!(RbVM::sys_complete_awakeable_failure, 2),
+    )?;
+    vm_class.define_method("sys_get_promise", method!(RbVM::sys_get_promise, 1))?;
+    vm_class.define_method("sys_peek_promise", method!(RbVM::sys_peek_promise, 1))?;
+    vm_class.define_method(
+        "sys_complete_promise_success",
+        method!(RbVM::sys_complete_promise_success, 2),
+    )?;
+    vm_class.define_method(
+        "sys_complete_promise_failure",
+        method!(RbVM::sys_complete_promise_failure, 2),
+    )?;
+    vm_class.define_method(
+        "sys_cancel_invocation",
+        method!(RbVM::sys_cancel_invocation, 1),
+    )?;
 
     // IdentityVerifier
     let iv_class = internal.define_class("IdentityVerifier", ruby.class_object())?;

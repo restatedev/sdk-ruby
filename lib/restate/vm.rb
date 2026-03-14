@@ -235,6 +235,49 @@ module Restate
       @vm.is_replaying
     end
 
+    # Returns [awakeable_id (String), notification_handle (Integer)]
+    sig { returns([String, Integer]) }
+    def sys_awakeable
+      @vm.sys_awakeable
+    end
+
+    sig { params(awakeable_id: String, value: String).void }
+    def sys_complete_awakeable_success(awakeable_id, value)
+      @vm.sys_complete_awakeable_success(awakeable_id, value)
+    end
+
+    sig { params(awakeable_id: String, failure: T.untyped).void }
+    def sys_complete_awakeable_failure(awakeable_id, failure)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      @vm.sys_complete_awakeable_failure(awakeable_id, native_failure)
+    end
+
+    sig { params(key: String).returns(Integer) }
+    def sys_get_promise(key)
+      @vm.sys_get_promise(key)
+    end
+
+    sig { params(key: String).returns(Integer) }
+    def sys_peek_promise(key)
+      @vm.sys_peek_promise(key)
+    end
+
+    sig { params(key: String, value: String).returns(Integer) }
+    def sys_complete_promise_success(key, value)
+      @vm.sys_complete_promise_success(key, value)
+    end
+
+    sig { params(key: String, failure: T.untyped).returns(Integer) }
+    def sys_complete_promise_failure(key, failure)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      @vm.sys_complete_promise_failure(key, native_failure)
+    end
+
+    sig { params(invocation_id: String).void }
+    def sys_cancel_invocation(invocation_id)
+      @vm.sys_cancel_invocation(invocation_id)
+    end
+
     private
 
     sig { params(result: T.untyped).returns(T.untyped) }

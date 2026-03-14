@@ -123,11 +123,29 @@ module Restate
       @vm.sys_sleep(millis)
     end
 
-    # Block until a previously created handle completes.
-    sig { params(handle: Integer).returns(NilClass) }
+    # Block until a previously created handle completes. Returns the value.
+    sig { params(handle: Integer).returns(T.untyped) }
     def resolve_handle(handle)
       poll_and_take(handle)
-      nil
+    end
+
+    # Wait until any of the given handles completes. Does not take notifications.
+    sig { params(handles: T::Array[Integer]).void }
+    def wait_any_handle(handles)
+      poll_or_cancel(handles) unless handles.any? { |h| @vm.is_completed(h) }
+    end
+
+    # Check if a handle is completed (non-blocking).
+    sig { params(handle: Integer).returns(T::Boolean) }
+    def completed?(handle)
+      @vm.is_completed(handle)
+    end
+
+    # Take a completed handle's notification, returning the value.
+    # Raises TerminalError if the handle resolved to a failure.
+    sig { params(handle: Integer).returns(T.untyped) }
+    def take_completed(handle)
+      must_take_notification(handle)
     end
 
     # ── Durable run (side effect) ──
@@ -278,6 +296,82 @@ module Restate
                       input_serde: JsonSerde)
       object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers,
                   input_serde: input_serde) # rubocop:disable Layout/HashAlignment
+    end
+
+    # ── Awakeables ──
+
+    # Creates an awakeable without blocking. Returns [awakeable_id, handle].
+    sig { returns([String, Integer]) }
+    def create_awakeable
+      @vm.sys_awakeable
+    end
+
+    # Creates an awakeable and blocks until it is resolved.
+    # Returns [awakeable_id, value].
+    sig { params(serde: T.untyped).returns(T::Array[T.untyped]) }
+    def awakeable(serde: JsonSerde)
+      id, handle = @vm.sys_awakeable
+      value = poll_and_take(handle) do |raw|
+        raw.nil? ? nil : serde.deserialize(raw)
+      end
+      [id, value]
+    end
+
+    # Resolves an awakeable with a success value.
+    sig { params(awakeable_id: String, payload: T.untyped, serde: T.untyped).void }
+    def resolve_awakeable(awakeable_id, payload, serde: JsonSerde)
+      @vm.sys_complete_awakeable_success(awakeable_id, serde.serialize(payload).b)
+    end
+
+    # Rejects an awakeable with a terminal failure.
+    sig { params(awakeable_id: String, message: String, code: Integer).void }
+    def reject_awakeable(awakeable_id, message, code: 500)
+      failure = Failure.new(code: code, message: message)
+      @vm.sys_complete_awakeable_failure(awakeable_id, failure)
+    end
+
+    # ── Promises (Workflow API) ──
+
+    # Gets a durable promise value, blocking until resolved.
+    sig { params(name: String, serde: T.untyped).returns(T.untyped) }
+    def promise(name, serde: JsonSerde)
+      handle = @vm.sys_get_promise(name)
+      poll_and_take(handle) do |raw|
+        raw.nil? ? nil : serde.deserialize(raw)
+      end
+    end
+
+    # Peeks at a durable promise value without blocking. Returns nil if not yet resolved.
+    sig { params(name: String, serde: T.untyped).returns(T.untyped) }
+    def peek_promise(name, serde: JsonSerde)
+      handle = @vm.sys_peek_promise(name)
+      poll_and_take(handle) do |raw|
+        raw.nil? ? nil : serde.deserialize(raw)
+      end
+    end
+
+    # Resolves a durable promise with a success value.
+    sig { params(name: String, payload: T.untyped, serde: T.untyped).void }
+    def resolve_promise(name, payload, serde: JsonSerde)
+      handle = @vm.sys_complete_promise_success(name, serde.serialize(payload).b)
+      poll_and_take(handle)
+      nil
+    end
+
+    # Rejects a durable promise with a terminal failure.
+    sig { params(name: String, message: String, code: Integer).void }
+    def reject_promise(name, message, code: 500)
+      failure = Failure.new(code: code, message: message)
+      handle = @vm.sys_complete_promise_failure(name, failure)
+      poll_and_take(handle)
+      nil
+    end
+
+    # ── Cancel invocation ──
+
+    sig { params(invocation_id: String).void }
+    def cancel_invocation(invocation_id)
+      @vm.sys_cancel_invocation(invocation_id)
     end
 
     # ── Generic calls (raw bytes, no serde) ──
