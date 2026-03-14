@@ -805,11 +805,12 @@ The `examples/` directory contains runnable examples:
 
 | File | Shows |
 |------|-------|
-| `greeter.rb` | Overview: Service, VirtualObject, Workflow in one file |
+| `greeter.rb` | Hello World: simplest stateless service |
 | `durable_execution.rb` | `ctx.run`, `ctx.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
 | `virtual_objects.rb` | State ops, `handler` vs `shared`, `state_keys`, `clear_all` |
 | `workflow.rb` | Promises, signals, workflow state |
 | `service_communication.rb` | Calls, sends, fan-out/fan-in, `wait_any`, awakeables |
+| `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 
 Run any example:
 ```bash

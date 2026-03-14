@@ -63,5 +63,3 @@ class UserSignup < Restate::Workflow
     ctx.get('status') || 'unknown'
   end
 end
-
-ENDPOINT = Restate.endpoint(UserSignup)

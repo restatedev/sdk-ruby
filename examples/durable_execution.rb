@@ -58,5 +58,3 @@ class SubscriptionService < Restate::Service
     { 'subscription_id' => subscription_id, 'user_id' => user_id, 'plan' => plan }
   end
 end
-
-ENDPOINT = Restate.endpoint(SubscriptionService)

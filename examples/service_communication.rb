@@ -74,5 +74,3 @@ class FanOut < Restate::Service # rubocop:disable Style/OneClassPerFile
     { 'task' => task, 'callback_result' => callback_result }
   end
 end
-
-ENDPOINT = Restate.endpoint(Worker, FanOut)

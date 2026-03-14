@@ -73,12 +73,13 @@ test-services/                       Integration test services (for sdk-test-sui
 └── services/                        12 test service files (see Test Services section)
 
 examples/                            Runnable examples showcasing SDK features
-├── config.ru                        Rackup for greeter example
-├── greeter.rb                       Overview: Service, VirtualObject, Workflow
+├── config.ru                        Rackup: loads and serves all examples
+├── greeter.rb                       Hello World: simplest stateless service
 ├── durable_execution.rb             ctx.run, RunRetryPolicy, TerminalError
 ├── virtual_objects.rb               State ops, handler vs shared
 ├── workflow.rb                      Promises, signals, workflow state
-└── service_communication.rb         Calls, sends, fan-out, wait_any, awakeables
+├── service_communication.rb         Calls, sends, fan-out, wait_any, awakeables
+└── typed_handlers.rb               Dry::Struct input/output, JSON Schema generation
 ```
 
 ---

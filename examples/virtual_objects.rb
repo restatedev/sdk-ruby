@@ -52,5 +52,3 @@ class Counter < Restate::VirtualObject
     { 'cleared_keys' => keys }
   end
 end
-
-ENDPOINT = Restate.endpoint(Counter)
