@@ -52,6 +52,13 @@ class TestOrchestrator < Restate::Service
   end
 end
 
+class TestRunSync < Restate::Service
+  handler def compute(ctx, input)
+    result = ctx.run_sync("heavy-computation") { input * 2 }
+    "result:#{result}"
+  end
+end
+
 class TypedGreeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
   def greet(ctx, request)
@@ -76,7 +83,7 @@ end
 RSpec.describe Restate::Testing do
   before(:all) do
     @harness = Restate::Testing::RestateTestHarness.new(
-      TestGreeter, TestCounter, TestWorker, TestOrchestrator, TypedGreeter
+      TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TypedGreeter
     )
     @harness.start
   end
@@ -105,6 +112,12 @@ RSpec.describe Restate::Testing do
     response = post_json(@harness.ingress_url, "/TestCounter/#{key}/get", nil)
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq(5)
+  end
+
+  it "runs a durable block with run_sync (thread-offloaded)" do
+    response = post_json(@harness.ingress_url, "/TestRunSync/compute", 21)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("result:42")
   end
 
   it "supports service-to-service calls" do

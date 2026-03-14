@@ -175,6 +175,24 @@ module Restate
       DurableFuture.new(self, handle, serde: serde)
     end
 
+    # Like `run`, but executes the block in a real OS Thread and returns the value directly.
+    # Use this for CPU-intensive work that would otherwise block the fiber event loop.
+    sig do
+      params(
+        name: String,
+        serde: T.untyped,
+        retry_policy: T.nilable(RunRetryPolicy),
+        action: T.proc.returns(T.untyped)
+      ).returns(T.untyped)
+    end
+    def run_sync(name, serde: JsonSerde, retry_policy: nil, &action)
+      handle = @vm.sys_run(name)
+
+      @run_coros_to_execute[handle] = -> { execute_run_threaded(handle, action, serde, retry_policy) }
+
+      DurableFuture.new(self, handle, serde: serde).await
+    end
+
     # ── Service calls ──
 
     sig do
@@ -584,6 +602,33 @@ module Restate
       ).void
     end
     def execute_run(handle, action, serde, retry_policy)
+      propose_run_result(handle, action, serde, retry_policy)
+    end
+
+    # Like execute_run, but offloads the action to a real OS Thread.
+    # The fiber yields (via IO.pipe) while the thread runs, keeping the event loop responsive.
+    sig do
+      params(
+        handle: Integer,
+        action: T.proc.returns(T.untyped),
+        serde: T.untyped,
+        retry_policy: T.nilable(RunRetryPolicy)
+      ).void
+    end
+    def execute_run_threaded(handle, action, serde, retry_policy)
+      propose_run_result(handle, -> { offload_to_thread(action) }, serde, retry_policy)
+    end
+
+    # Runs the action and proposes the result (success/failure/transient) to the VM.
+    sig do
+      params(
+        handle: Integer,
+        action: T.proc.returns(T.untyped),
+        serde: T.untyped,
+        retry_policy: T.nilable(RunRetryPolicy)
+      ).void
+    end
+    def propose_run_result(handle, action, serde, retry_policy)
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       begin
         result = action.call
@@ -616,6 +661,33 @@ module Restate
           config: config
         )
       end
+    end
+
+    # Run a block in a real OS thread, yielding the current fiber until it completes.
+    # Uses IO.pipe as a cross-thread signal: the fiber waits on the read end (yielding to
+    # the Async event loop), and the thread closes the write end when done.
+    sig { params(action: T.proc.returns(T.untyped)).returns(T.untyped) }
+    def offload_to_thread(action)
+      read_io, write_io = IO.pipe
+      result = T.let(nil, T.untyped)
+      error = T.let(nil, T.nilable(Exception))
+
+      thread = Thread.new do
+        result = action.call
+      rescue Exception => e # rubocop:disable Lint/RescueException
+        error = e
+      ensure
+        write_io.close
+      end
+
+      # Yields the fiber in Async context; resumes when the thread closes write_io.
+      read_io.read(1)
+      read_io.close
+      thread.join
+
+      raise error if error
+
+      result
     end
   end
 end
