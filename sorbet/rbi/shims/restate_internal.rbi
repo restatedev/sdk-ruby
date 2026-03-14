@@ -230,6 +230,30 @@ module Restate
 
       sig { returns(T::Boolean) }
       def is_replaying; end
+
+      sig { returns(T.untyped) }
+      def sys_awakeable; end
+
+      sig { params(id: String, buffer: String).void }
+      def sys_complete_awakeable_success(id, buffer); end
+
+      sig { params(id: String, failure: Failure).void }
+      def sys_complete_awakeable_failure(id, failure); end
+
+      sig { params(key: String).returns(Integer) }
+      def sys_get_promise(key); end
+
+      sig { params(key: String).returns(Integer) }
+      def sys_peek_promise(key); end
+
+      sig { params(key: String, buffer: String).returns(Integer) }
+      def sys_complete_promise_success(key, buffer); end
+
+      sig { params(key: String, failure: Failure).returns(Integer) }
+      def sys_complete_promise_failure(key, failure); end
+
+      sig { params(invocation_id: String).void }
+      def sys_cancel_invocation(invocation_id); end
     end
   end
 end
