@@ -4,7 +4,7 @@
 require 'restate'
 
 class MapObject < Restate::VirtualObject
-  handler(method_name: 'set') def set(ctx, entry)
+  handler def set(ctx, entry)
     ctx.set(entry['key'], entry['value'])
     nil
   end

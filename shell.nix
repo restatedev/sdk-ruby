@@ -18,6 +18,10 @@ with pkgs; mkShell {
     openssl
     libyaml
     zlib
+
+    # ide
+    biome
+    watchman
   ];
 
   LIBCLANG_PATH = pkgs.lib.makeLibraryPath [ pkgs.llvmPackages_latest.libclang.lib ];

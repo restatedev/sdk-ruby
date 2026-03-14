@@ -5,7 +5,7 @@ require 'restate'
 
 class KillTestRunner < Restate::VirtualObject
   handler def startCallTree(ctx) # rubocop:disable Naming/MethodName
-    ctx.object_call('KillTestSingleton', 'recursiveCall', ctx.key, nil)
+    ctx.object_call(KillTestSingleton, :recursiveCall, ctx.key, nil)
     nil
   end
 end

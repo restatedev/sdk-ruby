@@ -6,7 +6,7 @@ require 'restate'
 class CancelTestRunner < Restate::VirtualObject
   handler def startTest(ctx, op) # rubocop:disable Naming/MethodName,Naming/MethodParameterName
     begin
-      ctx.object_call('CancelTestBlockingService', 'block', ctx.key, op)
+      ctx.object_call(CancelTestBlockingService, :block, ctx.key, op)
     rescue Restate::TerminalError => e
       raise e unless e.status_code == 409
 

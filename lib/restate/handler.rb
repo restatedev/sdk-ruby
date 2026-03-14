@@ -6,9 +6,11 @@ module Restate
   ServiceTag = Struct.new(:kind, :name, :description, :metadata, keyword_init: true)
 
   # Describes the input/output serialization for a handler.
-  HandlerIO = Struct.new(:accept, :content_type, :input_serde, :output_serde, keyword_init: true) do
+  HandlerIO = Struct.new(:accept, :content_type, :input_serde, :output_serde,
+                         :input_schema, :output_schema, keyword_init: true) do
     def initialize(accept: 'application/json', content_type: 'application/json',
-                   input_serde: JsonSerde, output_serde: JsonSerde)
+                   input_serde: JsonSerde, output_serde: JsonSerde,
+                   input_schema: nil, output_schema: nil)
       super
     end
   end

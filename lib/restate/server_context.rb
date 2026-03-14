@@ -172,8 +172,8 @@ module Restate
 
     sig do
       params(
-        service: String,
-        handler: String,
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol),
         arg: T.untyped,
         key: T.nilable(String),
         idempotency_key: T.nilable(String),
@@ -183,21 +183,24 @@ module Restate
       ).returns(T.untyped)
     end
     def service_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
-                     input_serde: JsonSerde, output_serde: JsonSerde)
-      parameter = input_serde.serialize(arg)
+                     input_serde: NOT_SET, output_serde: NOT_SET)
+      svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
+      in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
+      out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
+      parameter = in_serde.serialize(arg)
       call_handle = @vm.sys_call(
-        service: service, handler: handler, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       poll_and_take(call_handle.result_handle) do |raw|
-        raw.nil? ? nil : output_serde.deserialize(raw)
+        raw.nil? ? nil : out_serde.deserialize(raw)
       end
     end
 
     sig do
       params(
-        service: String,
-        handler: String,
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol),
         arg: T.untyped,
         key: T.nilable(String),
         delay: T.nilable(Numeric),
@@ -207,19 +210,21 @@ module Restate
       ).void
     end
     def service_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
-                     input_serde: JsonSerde)
-      parameter = input_serde.serialize(arg)
+                     input_serde: NOT_SET)
+      svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
+      in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
+      parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
       @vm.sys_send(
-        service: service, handler: handler, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
     end
 
     sig do
       params(
-        service: String,
-        handler: String,
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol),
         key: String,
         arg: T.untyped,
         idempotency_key: T.nilable(String),
@@ -229,21 +234,24 @@ module Restate
       ).returns(T.untyped)
     end
     def object_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
-                    input_serde: JsonSerde, output_serde: JsonSerde)
-      parameter = input_serde.serialize(arg)
+                    input_serde: NOT_SET, output_serde: NOT_SET)
+      svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
+      in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
+      out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
+      parameter = in_serde.serialize(arg)
       call_handle = @vm.sys_call(
-        service: service, handler: handler, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       poll_and_take(call_handle.result_handle) do |raw|
-        raw.nil? ? nil : output_serde.deserialize(raw)
+        raw.nil? ? nil : out_serde.deserialize(raw)
       end
     end
 
     sig do
       params(
-        service: String,
-        handler: String,
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol),
         key: String,
         arg: T.untyped,
         delay: T.nilable(Numeric),
@@ -253,19 +261,21 @@ module Restate
       ).void
     end
     def object_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
-                    input_serde: JsonSerde)
-      parameter = input_serde.serialize(arg)
+                    input_serde: NOT_SET)
+      svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
+      in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
+      parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
       @vm.sys_send(
-        service: service, handler: handler, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
     end
 
     sig do
       params(
-        service: String,
-        handler: String,
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol),
         key: String,
         arg: T.untyped,
         idempotency_key: T.nilable(String),
@@ -275,15 +285,15 @@ module Restate
       ).returns(T.untyped)
     end
     def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
-                      input_serde: JsonSerde, output_serde: JsonSerde)
+                      input_serde: NOT_SET, output_serde: NOT_SET)
       object_call(service, handler, key, arg, idempotency_key: idempotency_key, headers: headers,
                   input_serde: input_serde, output_serde: output_serde) # rubocop:disable Layout/HashAlignment
     end
 
     sig do
       params(
-        service: String,
-        handler: String,
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol),
         key: String,
         arg: T.untyped,
         delay: T.nilable(Numeric),
@@ -293,7 +303,7 @@ module Restate
       ).void
     end
     def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
-                      input_serde: JsonSerde)
+                      input_serde: NOT_SET)
       object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers,
                   input_serde: input_serde) # rubocop:disable Layout/HashAlignment
     end
@@ -547,6 +557,39 @@ module Restate
         break if output.nil? || output.empty?
 
         @send_output.call(output)
+      end
+    end
+
+    # ── Call target resolution ──
+
+    # Resolves a service+handler pair from class/symbol or string/string.
+    # Returns [service_name, handler_name, handler_metadata_or_nil].
+    sig do
+      params(
+        service: T.any(String, T::Class[T.anything]),
+        handler: T.any(String, Symbol)
+      ).returns([String, String, T.nilable(Handler)])
+    end
+    def resolve_call_target(service, handler)
+      if service.is_a?(Class) && service.respond_to?(:service_name)
+        svc_name = T.unsafe(service).service_name
+        handler_name = handler.to_s
+        handler_meta = service.respond_to?(:handlers) ? T.unsafe(service).handlers[handler_name] : nil
+        [svc_name, handler_name, handler_meta]
+      else
+        [service.to_s, handler.to_s, nil]
+      end
+    end
+
+    # Resolves a serde value: if the caller passed NOT_SET, fall back to handler metadata, then JsonSerde.
+    sig { params(caller_serde: T.untyped, handler_meta: T.nilable(Handler), field: Symbol).returns(T.untyped) }
+    def resolve_serde(caller_serde, handler_meta, field)
+      return caller_serde unless caller_serde.equal?(NOT_SET)
+
+      if handler_meta
+        handler_meta.handler_io.public_send(field)
+      else
+        JsonSerde
       end
     end
 

@@ -74,12 +74,14 @@ module Restate
 
       input_payload = {
         required: false,
-        contentType: handler.handler_io.accept
+        contentType: handler.handler_io.accept,
+        jsonSchema: handler.handler_io.input_schema
       }
 
       output_payload = {
         setContentTypeIfEmpty: false,
-        contentType: handler.handler_io.content_type
+        contentType: handler.handler_io.content_type,
+        jsonSchema: handler.handler_io.output_schema
       }
 
       compact({

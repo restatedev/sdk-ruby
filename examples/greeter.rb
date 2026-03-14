@@ -26,13 +26,14 @@ require 'restate'
 # ──────────────────────────────────────────────
 
 class Greeter < Restate::Service
-  handler def greet(ctx, name)
+  handler :greet, input_type: String, output_type: String
+  def greet(ctx, name)
     ctx.run('build-greeting') { "Hello, #{name}!" }
   end
 
   handler def greetAndRemember(ctx, name) # rubocop:disable Naming/MethodName
-    # Call the Counter virtual object to track how many times we greeted
-    count = ctx.object_call('Counter', 'add', name, 1)
+    # Typed call: pass class + symbol instead of strings
+    count = ctx.object_call(Counter, :add, name, 1)
 
     "Hello, #{name}! (greeted #{count['newValue']} times)"
   end

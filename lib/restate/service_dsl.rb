@@ -63,7 +63,9 @@ module Restate
           accept: meta[:accept] || 'application/json',
           content_type: meta[:content_type] || 'application/json',
           input_serde: meta[:input_serde] || JsonSerde,
-          output_serde: meta[:output_serde] || JsonSerde
+          output_serde: meta[:output_serde] || JsonSerde,
+          input_schema: Restate.compute_json_schema(meta[:input_type]),
+          output_schema: Restate.compute_json_schema(meta[:output_type])
         )
 
         um = instance_method(name)

@@ -12,7 +12,7 @@ def do_left_action(ctx) # rubocop:disable Naming/PredicateMethod
 end
 
 def increment_counter(ctx)
-  ctx.object_send('Counter', 'add', ctx.key, 1)
+  ctx.object_send(Counter, :add, ctx.key, 1)
 end
 
 class NonDeterministic < Restate::VirtualObject
