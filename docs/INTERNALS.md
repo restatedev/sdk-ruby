@@ -148,12 +148,14 @@ The `ctx` object passed to every handler. Implements:
 
 - **Progress loop** (`poll_or_cancel`) — the core execution driver.
 - **Public context API** — `get`, `set`, `clear`, `clear_all`, `state_keys`, `sleep`, `run`,
-  `service_call`, `service_send`, `object_call`, `object_send`, `workflow_call`, `workflow_send`,
-  `generic_call`, `generic_send`, `promise`, `peek_promise`, `resolve_promise`, `reject_promise`,
-  `awakeable`, `resolve_awakeable`, `reject_awakeable`, `cancel_invocation`, `wait_any`.
+  `run_sync`, `service_call`, `service_send`, `object_call`, `object_send`, `workflow_call`,
+  `workflow_send`, `generic_call`, `generic_send`, `promise`, `peek_promise`, `resolve_promise`,
+  `reject_promise`, `awakeable`, `resolve_awakeable`, `reject_awakeable`, `cancel_invocation`,
+  `wait_any`.
 - **Low-level handle API** (used by test services) — `resolve_handle`, `wait_any_handle`,
   `completed?`, `take_completed`.
-- **Run execution** — spawns durable side effects as Async child tasks.
+- **Run execution** — spawns durable side effects as Async child tasks. `run` uses fibers;
+  `run_sync` offloads to a real OS Thread via `offload_to_thread` (IO.pipe-based fiber yield).
 
 ### Service Types
 
@@ -473,6 +475,21 @@ When user code calls `ctx.run('name') { ... }`:
 
 **During replay**, the VM already has the result from the journal. `do_progress` returns
 `AnyCompleted` directly — the action block is never executed.
+
+### `run_sync` (Thread-Offloaded Variant)
+
+`ctx.run_sync('name') { ... }` has the same durable semantics as `ctx.run` but offloads the
+user's block to a real OS Thread. This prevents CPU-intensive work from blocking the
+fiber event loop (which would starve all other concurrent handler invocations).
+
+The mechanism uses `offload_to_thread`:
+1. Creates an `IO.pipe`
+2. Spawns a `Thread` that runs the action and closes the write end on completion
+3. The fiber calls `read_io.read(1)`, which yields the fiber in Async context
+4. When the thread closes the pipe, the fiber resumes
+5. VM calls (`propose_run_completion_*`) happen on the fiber, preserving thread safety
+
+`run_sync` auto-awaits the future, returning the value directly (no `.await` needed).
 
 ---
 

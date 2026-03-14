@@ -161,6 +161,18 @@ ctx.run('validate') do
 end.await
 ```
 
+**Thread-offloaded run** (`ctx.run_sync`):
+
+For CPU-intensive work that would block the fiber event loop, use `run_sync`. It executes the
+block in a real OS Thread, keeping the event loop responsive for other concurrent handler
+invocations. Returns the value directly (no `.await` needed).
+
+```ruby
+result = ctx.run_sync('heavy-computation') { expensive_calculation() }
+```
+
+Same durable semantics as `ctx.run` — the result is journaled and replayed on retry.
+
 ### State Operations
 
 Available in `VirtualObject` and `Workflow` handlers.
@@ -736,6 +748,7 @@ ctx.state_keys → Array[String]
 
 # Durable execution
 ctx.run(name, retry_policy: nil) { block } → DurableFuture
+ctx.run_sync(name, retry_policy: nil) { block } → value  # Thread-offloaded
 ctx.sleep(seconds) → DurableFuture
 
 # Service calls
