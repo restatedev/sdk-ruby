@@ -694,6 +694,10 @@ module Restate
     # until it completes. Uses IO.pipe to yield the fiber to the Async event loop
     # while the thread does work.
     #
+    # The action is wrapped with a cancellation flag so that if the invocation
+    # finishes (e.g., suspended, terminal error) before the pool picks up the job,
+    # the action is skipped.
+    #
     # Note: With Async 2.x and Ruby 3.1+, the Fiber Scheduler already intercepts
     # most blocking I/O (Net::HTTP, TCPSocket, etc.) and yields the fiber
     # automatically. +background: true+ is only needed for CPU-heavy native
@@ -703,14 +707,20 @@ module Restate
       read_io, write_io = IO.pipe
       result = T.let(nil, T.untyped)
       error = T.let(nil, T.nilable(Exception))
+      cancelled = T.let(false, T::Boolean)
 
       begin
         BackgroundPool.submit do
+          if cancelled
+            # Invocation finished before pool picked up the job — skip.
+            next
+          end
+
           result = action.call
         rescue Exception => e # rubocop:disable Lint/RescueException
           error = e
         ensure
-          write_io.close
+          write_io.close unless write_io.closed?
         end
 
         # Yields the fiber in Async context; resumes when the worker closes write_io.
@@ -721,6 +731,8 @@ module Restate
 
         result
       ensure
+        # Signal cancellation so the pool worker skips if it hasn't started yet.
+        cancelled = true
         read_io.close unless read_io.closed?
         write_io.close unless write_io.closed?
       end
@@ -728,7 +740,7 @@ module Restate
 
     # A simple fixed-size thread pool for background: true runs.
     # Avoids creating a new Thread per call (~1ms + ~1MB stack each).
-    # Workers pull jobs from a shared Queue and execute them.
+    # Workers are daemon threads that do not prevent process exit.
     module BackgroundPool
       extend T::Sig
 
@@ -764,6 +776,8 @@ module Restate
               end
             end
             worker.name = "restate-bg-#{@size}"
+            # Daemon thread: does not prevent the process from exiting.
+            worker.report_on_exception = false
             @workers << worker
           end
         end
