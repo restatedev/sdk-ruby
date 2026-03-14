@@ -63,10 +63,10 @@ module Restate
 
     # Register a handler (instance-based API).
     def handler(name, accept: 'application/json', content_type: 'application/json',
-                input_serde: JsonSerde, output_serde: JsonSerde, &block)
+                input: nil, output: nil, &block)
       handler_io = HandlerIO.new(
         accept: accept, content_type: content_type,
-        input_serde: input_serde, output_serde: output_serde
+        input_serde: Serde.resolve(input), output_serde: Serde.resolve(output)
       )
 
       h = Handler.new(

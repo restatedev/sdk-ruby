@@ -174,7 +174,9 @@ The shared class-level DSL included by all service types:
 - `service_tag` → `ServiceTag` — built from `service_name` and `_service_kind`
 - `handlers` → `Hash[String, Handler]` — lazy-built, cached
 - `_register_handler(method_name, kind:, **opts)` — stores in registry, invalidates cache
-- `_build_handlers` — reflects on instance methods, binds to `.allocate` instances, creates Handler structs
+- `_build_handlers` — reflects on instance methods, binds to `.allocate` instances, creates
+  Handler structs. Uses `Serde.resolve(meta[:input])` / `Serde.resolve(meta[:output])` to
+  convert `input:`/`output:` options into serde objects with schema
 
 **Handler binding**: The DSL uses `instance_method(name).bind_call(allocate, ...)` pattern. This
 creates a lightweight uninitialized instance for method dispatch. Handlers are stateless — any
@@ -187,7 +189,8 @@ instance state should go through `ctx.get`/`ctx.set`.
 
 **Data structures:**
 - `ServiceTag` = `Struct.new(:kind, :name, :description, :metadata)`
-- `HandlerIO` = `Struct.new(:accept, :content_type, :input_serde, :output_serde, :input_schema, :output_schema)`
+- `HandlerIO` = `Struct.new(:accept, :content_type, :input_serde, :output_serde)` — schema lives
+  on the serde objects (accessed via `input_serde.json_schema`), not as separate fields.
 - `Handler` = `Struct.new(:service_tag, :handler_io, :kind, :name, :callable, :arity)`
 
 ### Durable Futures (`lib/restate/durable_future.rb`)
@@ -212,10 +215,22 @@ Three classes for async result handling:
 ### Serialization (`lib/restate/serde.rb`)
 
 - **`JsonSerde`** — default. `JSON.generate` / `JSON.parse(buf, symbolize_names: false)`.
-  Serializes nil as empty string (not `"null"`).
-- **`BytesSerde`** — pass-through for raw bytes.
+  Serializes nil as empty string (not `"null"`). Has `json_schema` returning nil.
+- **`BytesSerde`** — pass-through for raw bytes. Has `json_schema` returning nil.
 - **`NOT_SET`** — frozen sentinel to distinguish "caller didn't pass serde" from `nil`.
-- **`compute_json_schema(type)`** — generates JSON schema from Ruby types for discovery.
+- **`Serde.resolve(type_or_serde)`** — resolves a type class or serde object into a serde
+  with `serialize`/`deserialize`/`json_schema`. Priority: already a serde → use directly;
+  `Dry::Struct` subclass → `DryStructSerde`; primitive type → `TypeSerde` with schema;
+  class with `.json_schema` → `TypeSerde`; fallback → `JsonSerde`.
+- **`TypeSerde`** — wraps a primitive type or custom-schema class. Delegates to `JsonSerde`
+  for serialize/deserialize, adds `json_schema` from the type.
+- **`DryStructSerde`** — for `Dry::Struct` subclasses. Deserializes JSON into struct instances
+  via `Struct.new(**hash)`, serializes via `to_h` + `JSON.generate`. Generates JSON Schema
+  by introspecting dry-types (handles Nominal, Sum/optional, Array::Member, Constrained,
+  nested structs).
+- **`PRIMITIVE_SCHEMAS`** — maps Ruby classes to JSON Schema hashes.
+- **`PRIMITIVE_JSON_SCHEMAS`** — maps class name strings to JSON Schema hashes (used by
+  dry-types converter).
 
 ### Error Types (`lib/restate/errors.rb`)
 

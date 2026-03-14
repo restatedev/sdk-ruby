@@ -69,19 +69,19 @@ module Restate
     end
 
     sig { params(handler: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
-    def build_handler(handler)
+    def build_handler(handler) # rubocop:disable Metrics/AbcSize
       ty = handler.kind ? HANDLER_TYPES.fetch(handler.kind) : nil
 
       input_payload = {
         required: false,
         contentType: handler.handler_io.accept,
-        jsonSchema: handler.handler_io.input_schema
+        jsonSchema: handler.handler_io.input_serde.json_schema
       }
 
       output_payload = {
         setContentTypeIfEmpty: false,
         contentType: handler.handler_io.content_type,
-        jsonSchema: handler.handler_io.output_schema
+        jsonSchema: handler.handler_io.output_serde.json_schema
       }
 
       compact({

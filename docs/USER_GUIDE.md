@@ -345,7 +345,7 @@ class MyService < Restate::Service
   end
 
   # With options
-  handler :process, input_type: String, output_type: Hash
+  handler :process, input: String, output: Hash
   def process(ctx, input)
     { 'result' => input.upcase }
   end
@@ -356,13 +356,16 @@ end
 
 ```ruby
 handler :my_handler,
-  input_type: String,                  # Generates JSON schema for discovery
-  output_type: Hash,                   # Generates JSON schema for discovery
+  input: String,                       # Type or serde for input (generates JSON schema)
+  output: Hash,                        # Type or serde for output (generates JSON schema)
   accept: 'application/json',         # Input content type
-  content_type: 'application/json',   # Output content type
-  input_serde: Restate::JsonSerde,    # Custom input deserializer
-  output_serde: Restate::JsonSerde    # Custom output serializer
+  content_type: 'application/json'    # Output content type
 ```
+
+The `input:` and `output:` options accept:
+1. A **type class** (e.g., `String`, `Integer`, `Dry::Struct` subclass) — auto-resolves serde + JSON schema
+2. A **serde object** (responds to `serialize`/`deserialize`) — used directly
+3. Omitted — defaults to `JsonSerde` with no schema
 
 ### Custom Service Name
 
@@ -417,6 +420,52 @@ run endpoint.app  # In config.ru
 
 ---
 
+## Typed Handlers (dry-struct)
+
+For structured input/output with automatic JSON Schema generation, use
+[dry-struct](https://dry-rb.org/gems/dry-struct/) (optional dependency).
+
+```ruby
+require 'dry-struct'
+
+module Types
+  include Dry.Types()
+end
+
+class GreetingRequest < Dry::Struct
+  attribute :name, Types::String
+  attribute? :greeting, Types::String    # optional attribute
+end
+
+class Greeter < Restate::Service
+  handler :greet, input: GreetingRequest, output: String
+  def greet(ctx, request)
+    # request is a GreetingRequest instance, not a raw Hash
+    greeting = request.greeting || "Hello"
+    "#{greeting}, #{request.name}!"
+  end
+end
+```
+
+The SDK auto-detects `Dry::Struct` at runtime — no configuration needed. When a handler
+declares `input: GreetingRequest`:
+- Input JSON is deserialized into a `GreetingRequest` struct instance
+- JSON Schema is generated from the dry-types definitions and published via discovery
+- Output is serialized based on the `output:` type
+
+Supported dry-types mappings:
+| dry-types | JSON Schema |
+|-----------|-------------|
+| `Types::String` | `{type: 'string'}` |
+| `Types::Integer` | `{type: 'integer'}` |
+| `Types::Float` | `{type: 'number'}` |
+| `Types::Bool` | `{type: 'boolean'}` |
+| `Types::Integer.optional` | `{anyOf: [{type: 'integer'}, {type: 'null'}]}` |
+| `Types::Array.of(Types::String)` | `{type: 'array', items: {type: 'string'}}` |
+| Nested `Dry::Struct` | Recursive object schema |
+
+---
+
 ## Serialization
 
 ### Built-in Serdes
@@ -442,7 +491,7 @@ module MarshalSerde
 end
 
 # Use in handler registration
-handler :process, input_serde: MarshalSerde, output_serde: MarshalSerde
+handler :process, input: MarshalSerde, output: MarshalSerde
 ```
 
 ---

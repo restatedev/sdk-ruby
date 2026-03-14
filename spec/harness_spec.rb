@@ -3,9 +3,19 @@
 require "spec_helper"
 require "restate"
 require "restate/testing"
+require "dry-struct"
 require "net/http"
 require "json"
 require "securerandom"
+
+module Types
+  include Dry.Types()
+end
+
+class GreetingRequest < Dry::Struct
+  attribute :name, Types::String
+  attribute? :greeting, Types::String
+end
 
 # ── Test services (defined inline) ──────────────────────────
 
@@ -42,6 +52,14 @@ class TestOrchestrator < Restate::Service
   end
 end
 
+class TypedGreeter < Restate::Service
+  handler :greet, input: GreetingRequest, output: String
+  def greet(ctx, request)
+    greeting = request.greeting || "Hello"
+    "#{greeting}, #{request.name}!"
+  end
+end
+
 # ── Helpers ──────────────────────────────────────────────────
 
 def post_json(base_url, path, body)
@@ -58,7 +76,7 @@ end
 RSpec.describe Restate::Testing do
   before(:all) do
     @harness = Restate::Testing::RestateTestHarness.new(
-      TestGreeter, TestCounter, TestWorker, TestOrchestrator
+      TestGreeter, TestCounter, TestWorker, TestOrchestrator, TypedGreeter
     )
     @harness.start
   end
@@ -93,5 +111,18 @@ RSpec.describe Restate::Testing do
     response = post_json(@harness.ingress_url, "/TestOrchestrator/orchestrate", "hello")
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("orchestrated:processed:hello")
+  end
+
+  it "handles typed dry-struct input" do
+    response = post_json(@harness.ingress_url, "/TypedGreeter/greet", { "name" => "World" })
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("Hello, World!")
+  end
+
+  it "handles typed dry-struct input with optional field" do
+    response = post_json(@harness.ingress_url, "/TypedGreeter/greet",
+                         { "name" => "World", "greeting" => "Hi" })
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("Hi, World!")
   end
 end

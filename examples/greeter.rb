@@ -26,7 +26,7 @@ require 'restate'
 # ──────────────────────────────────────────────
 
 class Greeter < Restate::Service
-  handler :greet, input_type: String, output_type: String
+  handler :greet, input: String, output: String
   def greet(ctx, name)
     ctx.run('build-greeting') { "Hello, #{name}!" }.await
   end

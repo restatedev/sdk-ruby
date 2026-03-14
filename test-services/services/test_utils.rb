@@ -17,7 +17,7 @@ class TestUtilsService < Restate::Service
   end
 
   handler :rawEcho, accept: '*/*', content_type: 'application/octet-stream',
-                    input_serde: Restate::BytesSerde, output_serde: Restate::BytesSerde
+                    input: Restate::BytesSerde, output: Restate::BytesSerde
   def rawEcho(_ctx, input) # rubocop:disable Naming/MethodName
     input
   end
