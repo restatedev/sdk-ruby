@@ -192,13 +192,11 @@ module Restate
           while (chunk = rack_input.read_partial(16_384))
             input_queue.enqueue(chunk.b) unless chunk.empty?
           end
+          input_queue.enqueue(:eof)
         rescue StandardError => e
           LOGGER.error("Input reader error: #{e.inspect}")
-        ensure
-          input_queue.enqueue(:eof)
+          input_queue.enqueue(:disconnected)
         end
-      else
-        input_queue.enqueue(:eof)
       end
 
       context = ServerContext.new(

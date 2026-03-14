@@ -16,7 +16,7 @@ module Restate
     def serialize(obj)
       return ''.b if obj.nil?
 
-      JSON.generate(obj).encode('UTF-8').b
+      JSON.generate(obj).b
     end
 
     # Deserialize a JSON byte string to a Ruby object. Returns nil for nil or empty input.
@@ -75,18 +75,6 @@ module Restate
     Array => { 'type' => 'array' },
     Hash => { 'type' => 'object' },
     NilClass => { 'type' => 'null' }
-  }.freeze
-
-  # Maps a Ruby primitive class name (String) to a JSON Schema type hash.
-  PRIMITIVE_JSON_SCHEMAS = {
-    'String' => { 'type' => 'string' },
-    'Integer' => { 'type' => 'integer' },
-    'Float' => { 'type' => 'number' },
-    'TrueClass' => { 'type' => 'boolean' },
-    'FalseClass' => { 'type' => 'boolean' },
-    'NilClass' => { 'type' => 'null' },
-    'Array' => { 'type' => 'array' },
-    'Hash' => { 'type' => 'object' }
   }.freeze
 
   # Serde resolution utilities: converts a type or serde into a serde object.
@@ -168,7 +156,7 @@ module Restate
       prim = type.primitive
       return dry_struct_to_json_schema(prim) if dry_struct?(prim)
 
-      PRIMITIVE_JSON_SCHEMAS[prim.name] || {}
+      PRIMITIVE_SCHEMAS[prim] || {}
     end
   end
 
@@ -220,7 +208,7 @@ module Restate
       return ''.b if obj.nil?
 
       hash = obj.respond_to?(:to_h) ? obj.to_h : obj
-      JSON.generate(hash).encode('UTF-8').b
+      JSON.generate(hash).b
     end
 
     # Deserialize JSON bytes into a Dry::Struct instance.
@@ -235,7 +223,7 @@ module Restate
     # Return the JSON Schema derived from the Dry::Struct definition.
     sig { returns(T::Hash[String, T.untyped]) }
     def json_schema
-      Serde.dry_struct_to_json_schema(@struct_class)
+      @json_schema ||= Serde.dry_struct_to_json_schema(@struct_class)
     end
   end
 end

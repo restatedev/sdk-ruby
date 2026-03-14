@@ -37,6 +37,10 @@ module Restate
     # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
     # @return [Symbol] the method name
     def self.handler(method_name = nil, kind: :exclusive, **opts)
+      if method_name.is_a?(String)
+        raise ArgumentError,
+              "handler expects a Symbol (use `handler def #{method_name}(...)` or `handler :#{method_name}`)"
+      end
       return method_name unless method_name.is_a?(Symbol)
 
       _register_handler(method_name, **T.unsafe({ kind: kind.to_s, **opts }))
@@ -47,6 +51,11 @@ module Restate
     # @param method_name [Symbol] name of the method to register
     # @return [Symbol] the method name
     def self.shared(method_name, **opts)
+      if method_name.is_a?(String)
+        raise ArgumentError,
+              "handler expects a Symbol (use `shared def #{method_name}(...)` or `shared :#{method_name}`)"
+      end
+
       _register_handler(method_name, **T.unsafe({ kind: 'shared', **opts }))
     end
 
@@ -92,6 +101,8 @@ module Restate
     # @return [self]
     def handler(name, kind: :exclusive, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)
+      raise ArgumentError, 'handler requires a block' unless block
+
       handler_io = HandlerIO.new(
         accept: accept, content_type: content_type,
         input_serde: Serde.resolve(input), output_serde: Serde.resolve(output)

@@ -65,6 +65,7 @@ module Restate
     def _build_handlers # rubocop:disable Metrics/AbcSize,Metrics/MethodLength
       tag = service_tag
       result = {}
+      instance = T.unsafe(self).allocate
 
       @_handler_registry.each do |name, meta|
         input_serde = Serde.resolve(meta[:input])
@@ -78,7 +79,12 @@ module Restate
         )
 
         um = T.unsafe(self).instance_method(name)
-        bound = um.bind(T.unsafe(self).allocate)
+        arity = um.arity.abs
+        unless [1, 2].include?(arity)
+          Kernel.raise ArgumentError, "handler '#{name}' must accept 1 or 2 parameters (ctx, [input]), got #{arity}"
+        end
+
+        bound = um.bind(instance)
 
         result[name] = Handler.new(
           service_tag: tag,
@@ -86,7 +92,7 @@ module Restate
           kind: meta[:kind],
           name: name,
           callable: bound,
-          arity: um.arity.abs
+          arity: arity
         )
       end
 

@@ -75,6 +75,8 @@ module Restate
         @vm.notify_error(e.inspect, e.backtrace&.join("\n"))
         raise
       end
+    ensure
+      @run_coros_to_execute.clear
     end
 
     # ── State operations ──
@@ -470,7 +472,7 @@ module Restate
     # Returns metadata about the current invocation (id, headers, raw body).
     sig { override.returns(T.untyped) }
     def request
-      Request.new(
+      @request ||= Request.new(
         id: @invocation.invocation_id,
         headers: @invocation.headers.to_h,
         body: @invocation.input_buffer
@@ -507,13 +509,11 @@ module Restate
 
         if response.is_a?(Exception)
           LOGGER.error("Exception in do_progress: #{response}")
-          flush_output
           raise InternalError
         end
 
         case response
         when Suspended
-          flush_output
           raise SuspendedError
         when DoProgressAnyCompleted
           return
@@ -699,22 +699,27 @@ module Restate
       result = T.let(nil, T.untyped)
       error = T.let(nil, T.nilable(Exception))
 
-      thread = Thread.new do
-        result = action.call
-      rescue Exception => e # rubocop:disable Lint/RescueException
-        error = e
+      begin
+        thread = Thread.new do
+          result = action.call
+        rescue Exception => e # rubocop:disable Lint/RescueException
+          error = e
+        ensure
+          write_io.close
+        end
+
+        # Yields the fiber in Async context; resumes when the thread closes write_io.
+        read_io.read(1)
+        read_io.close
+        thread.join
+
+        raise error if error
+
+        result
       ensure
-        write_io.close
+        read_io.close unless read_io.closed?
+        write_io.close unless write_io.closed?
       end
-
-      # Yields the fiber in Async context; resumes when the thread closes write_io.
-      read_io.read(1)
-      read_io.close
-      thread.join
-
-      raise error if error
-
-      result
     end
   end
 end
