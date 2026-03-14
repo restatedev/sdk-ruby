@@ -557,6 +557,105 @@ end
 
 ---
 
+## IDE Code Completion (Optional)
+
+The SDK ships a [Tapioca](https://github.com/Shopify/tapioca) DSL compiler that gives your IDE
+full code completion for the `ctx` parameter in handler methods — with zero annotations in your
+code.
+
+The compiler generates [Sorbet](https://sorbet.org/) type signatures that map each handler's
+`ctx` to the correct interface:
+
+| Service type | `ctx` typed as | Available methods |
+|---|---|---|
+| `Restate::Service` | `Restate::Context` | `run`, `sleep`, calls, awakeables |
+| `Restate::VirtualObject` | `Restate::ObjectContext` | Above + `get`, `set`, `clear`, `state_keys` |
+| `Restate::Workflow` | `Restate::WorkflowContext` | Above + `promise`, `resolve_promise`, ... |
+
+### Setup
+
+**1. Add Sorbet and Tapioca to your Gemfile** (skip if you already use them):
+
+```ruby
+group :development do
+  gem 'sorbet', require: false
+  gem 'tapioca', require: false
+end
+```
+
+**2. Install and initialize** (one-time):
+
+```bash
+bundle install
+bundle exec tapioca init
+```
+
+**3. Generate the handler type signatures:**
+
+```bash
+bundle exec tapioca dsl
+```
+
+This creates RBI files under `sorbet/rbi/dsl/` — one per service class. For example, given:
+
+```ruby
+class Counter < Restate::VirtualObject
+  handler def add(ctx, addend)
+    old = ctx.get('count') || 0
+    ctx.set('count', old + addend)
+  end
+
+  shared def get(ctx)
+    ctx.get('count') || 0
+  end
+end
+```
+
+Tapioca generates:
+
+```ruby
+# sorbet/rbi/dsl/counter.rbi (auto-generated, do not edit)
+class Counter
+  sig { params(ctx: ::Restate::ObjectContext, input: T.untyped).returns(T.untyped) }
+  def add(ctx, input); end
+
+  sig { params(ctx: ::Restate::ObjectContext).returns(T.untyped) }
+  def get(ctx); end
+end
+```
+
+Your IDE now knows `ctx` is an `ObjectContext` and offers completion for `get`, `set`, `clear`,
+`run`, `sleep`, `service_call`, etc.
+
+### Re-generate after changes
+
+Run `tapioca dsl` again whenever you add or rename handlers:
+
+```bash
+bundle exec tapioca dsl
+```
+
+Commit the generated `sorbet/rbi/dsl/` files to version control so the whole team benefits.
+
+### Without Sorbet
+
+If you don't use Sorbet, you can still get completion in YARD-aware editors (Solargraph, RubyMine)
+by adding a `@param` tag:
+
+```ruby
+class Greeter < Restate::Service
+  # @param ctx [Restate::Context]
+  handler def greet(ctx, name)
+    ctx.run('step') { "Hello, #{name}!" }.await
+  end
+end
+```
+
+Use `Restate::Context`, `Restate::ObjectContext`, or `Restate::WorkflowContext` depending on
+the service type.
+
+---
+
 ## Running
 
 ### Development

@@ -6,12 +6,14 @@ module Restate
   #
   # Class-based API (preferred):
   #   class Counter < Restate::VirtualObject
+  #     # @param ctx [Restate::ObjectContext]
   #     handler def add(ctx, addend)
   #       old = ctx.get("count") || 0
   #       ctx.set("count", old + addend)
   #       old + addend
   #     end
   #
+  #     # @param ctx [Restate::ObjectContext]
   #     shared def get(ctx)
   #       ctx.get("count") || 0
   #     end

@@ -6,10 +6,12 @@ module Restate
   #
   # Class-based API (preferred):
   #   class Signup < Restate::Workflow
+  #     # @param ctx [Restate::WorkflowContext]
   #     main def run(ctx, email)
   #       # workflow logic
   #     end
   #
+  #     # @param ctx [Restate::WorkflowContext]
   #     handler def status(ctx)
   #       ctx.get("status")
   #     end

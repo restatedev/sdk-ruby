@@ -16,6 +16,7 @@ module Restate
   #   - The HTTP input reader (a separate Async task) feeds chunks into @input_queue.
   #   - Output chunks are written directly to the streaming response body.
   class ServerContext
+    include WorkflowContext
     extend T::Sig
 
     LOGGER = T.let(Logger.new($stdout, progname: 'Restate::ServerContext'), Logger)
@@ -79,7 +80,7 @@ module Restate
     # ── State operations ──
 
     # Durably retrieves a state entry by name. Returns nil if unset.
-    sig { params(name: String, serde: T.untyped).returns(T.untyped) }
+    sig { override.params(name: String, serde: T.untyped).returns(T.untyped) }
     def get(name, serde: JsonSerde)
       handle = @vm.sys_get_state(name)
       poll_and_take(handle) do |raw|
@@ -88,25 +89,25 @@ module Restate
     end
 
     # Durably sets a state entry. The value is serialized via +serde+.
-    sig { params(name: String, value: T.untyped, serde: T.untyped).void }
+    sig { override.params(name: String, value: T.untyped, serde: T.untyped).void }
     def set(name, value, serde: JsonSerde)
       @vm.sys_set_state(name, serde.serialize(value).b)
     end
 
     # Durably removes a single state entry by name.
-    sig { params(name: String).void }
+    sig { override.params(name: String).void }
     def clear(name)
       @vm.sys_clear_state(name)
     end
 
     # Durably removes all state entries for this virtual object or workflow.
-    sig { void }
+    sig { override.void }
     def clear_all
       @vm.sys_clear_all_state
     end
 
     # Returns the list of all state entry names for this virtual object or workflow.
-    sig { returns(T.untyped) }
+    sig { override.returns(T.untyped) }
     def state_keys
       handle = @vm.sys_get_state_keys
       poll_and_take(handle)
@@ -149,7 +150,7 @@ module Restate
     end
 
     # Wait until any of the given futures completes. Returns [completed, remaining].
-    sig { params(futures: DurableFuture).returns([T::Array[DurableFuture], T::Array[DurableFuture]]) }
+    sig { override.params(futures: DurableFuture).returns([T::Array[DurableFuture], T::Array[DurableFuture]]) }
     def wait_any(*futures)
       handles = futures.map(&:handle)
       wait_any_handle(handles)
@@ -170,7 +171,7 @@ module Restate
     # Executes a durable side effect. The block runs at most once; its result is
     # journaled and replayed on retries. Returns a DurableFuture for the result.
     sig do
-      params(
+      override.params(
         name: String,
         serde: T.untyped,
         retry_policy: T.nilable(RunRetryPolicy),
@@ -188,7 +189,7 @@ module Restate
     # Like `run`, but executes the block in a real OS Thread and returns the value directly.
     # Use this for CPU-intensive work that would otherwise block the fiber event loop.
     sig do
-      params(
+      override.params(
         name: String,
         serde: T.untyped,
         retry_policy: T.nilable(RunRetryPolicy),
@@ -207,7 +208,7 @@ module Restate
 
     # Durably calls a handler on a Restate service and returns a future for its result.
     sig do
-      params(
+      override.params(
         service: T.any(String, T::Class[T.anything]),
         handler: T.any(String, Symbol),
         arg: T.untyped,
@@ -234,7 +235,7 @@ module Restate
 
     # Sends a one-way invocation to a Restate service handler (fire-and-forget).
     sig do
-      params(
+      override.params(
         service: T.any(String, T::Class[T.anything]),
         handler: T.any(String, Symbol),
         arg: T.untyped,
@@ -260,7 +261,7 @@ module Restate
 
     # Durably calls a handler on a Restate virtual object, keyed by +key+.
     sig do
-      params(
+      override.params(
         service: T.any(String, T::Class[T.anything]),
         handler: T.any(String, Symbol),
         key: String,
@@ -287,7 +288,7 @@ module Restate
 
     # Sends a one-way invocation to a Restate virtual object handler (fire-and-forget).
     sig do
-      params(
+      override.params(
         service: T.any(String, T::Class[T.anything]),
         handler: T.any(String, Symbol),
         key: String,
@@ -313,7 +314,7 @@ module Restate
 
     # Durably calls a handler on a Restate workflow, keyed by +key+.
     sig do
-      params(
+      override.params(
         service: T.any(String, T::Class[T.anything]),
         handler: T.any(String, Symbol),
         key: String,
@@ -332,7 +333,7 @@ module Restate
 
     # Sends a one-way invocation to a Restate workflow handler (fire-and-forget).
     sig do
-      params(
+      override.params(
         service: T.any(String, T::Class[T.anything]),
         handler: T.any(String, Symbol),
         key: String,
@@ -352,20 +353,20 @@ module Restate
     # ── Awakeables ──
 
     # Creates an awakeable and returns [awakeable_id, DurableFuture].
-    sig { params(serde: T.untyped).returns([String, DurableFuture]) }
+    sig { override.params(serde: T.untyped).returns([String, DurableFuture]) }
     def awakeable(serde: JsonSerde)
       id, handle = @vm.sys_awakeable
       [id, DurableFuture.new(self, handle, serde: serde)]
     end
 
     # Resolves an awakeable with a success value.
-    sig { params(awakeable_id: String, payload: T.untyped, serde: T.untyped).void }
+    sig { override.params(awakeable_id: String, payload: T.untyped, serde: T.untyped).void }
     def resolve_awakeable(awakeable_id, payload, serde: JsonSerde)
       @vm.sys_complete_awakeable_success(awakeable_id, serde.serialize(payload).b)
     end
 
     # Rejects an awakeable with a terminal failure.
-    sig { params(awakeable_id: String, message: String, code: Integer).void }
+    sig { override.params(awakeable_id: String, message: String, code: Integer).void }
     def reject_awakeable(awakeable_id, message, code: 500)
       failure = Failure.new(code: code, message: message)
       @vm.sys_complete_awakeable_failure(awakeable_id, failure)
@@ -374,7 +375,7 @@ module Restate
     # ── Promises (Workflow API) ──
 
     # Gets a durable promise value, blocking until resolved.
-    sig { params(name: String, serde: T.untyped).returns(T.untyped) }
+    sig { override.params(name: String, serde: T.untyped).returns(T.untyped) }
     def promise(name, serde: JsonSerde)
       handle = @vm.sys_get_promise(name)
       poll_and_take(handle) do |raw|
@@ -383,7 +384,7 @@ module Restate
     end
 
     # Peeks at a durable promise value without blocking. Returns nil if not yet resolved.
-    sig { params(name: String, serde: T.untyped).returns(T.untyped) }
+    sig { override.params(name: String, serde: T.untyped).returns(T.untyped) }
     def peek_promise(name, serde: JsonSerde)
       handle = @vm.sys_peek_promise(name)
       poll_and_take(handle) do |raw|
@@ -392,7 +393,7 @@ module Restate
     end
 
     # Resolves a durable promise with a success value.
-    sig { params(name: String, payload: T.untyped, serde: T.untyped).void }
+    sig { override.params(name: String, payload: T.untyped, serde: T.untyped).void }
     def resolve_promise(name, payload, serde: JsonSerde)
       handle = @vm.sys_complete_promise_success(name, serde.serialize(payload).b)
       poll_and_take(handle)
@@ -400,7 +401,7 @@ module Restate
     end
 
     # Rejects a durable promise with a terminal failure.
-    sig { params(name: String, message: String, code: Integer).void }
+    sig { override.params(name: String, message: String, code: Integer).void }
     def reject_promise(name, message, code: 500)
       failure = Failure.new(code: code, message: message)
       handle = @vm.sys_complete_promise_failure(name, failure)
@@ -411,7 +412,7 @@ module Restate
     # ── Cancel invocation ──
 
     # Requests cancellation of another invocation by its id.
-    sig { params(invocation_id: String).void }
+    sig { override.params(invocation_id: String).void }
     def cancel_invocation(invocation_id)
       @vm.sys_cancel_invocation(invocation_id)
     end
@@ -420,7 +421,7 @@ module Restate
 
     # Durably calls a handler using raw bytes (no serialization). Useful for proxying.
     sig do
-      params(
+      override.params(
         service: String,
         handler: String,
         arg: String,
@@ -440,7 +441,7 @@ module Restate
 
     # Sends a one-way invocation using raw bytes (no serialization). Useful for proxying.
     sig do
-      params(
+      override.params(
         service: String,
         handler: String,
         arg: String,
@@ -462,7 +463,7 @@ module Restate
     # ── Request metadata ──
 
     # Returns metadata about the current invocation (id, headers, raw body).
-    sig { returns(T.untyped) }
+    sig { override.returns(T.untyped) }
     def request
       Request.new(
         id: @invocation.invocation_id,
@@ -472,7 +473,7 @@ module Restate
     end
 
     # Returns the key for this virtual object or workflow invocation.
-    sig { returns(String) }
+    sig { override.returns(String) }
     def key
       @invocation.key
     end

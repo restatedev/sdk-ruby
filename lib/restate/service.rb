@@ -6,6 +6,7 @@ module Restate
   #
   # Class-based API (preferred):
   #   class Greeter < Restate::Service
+  #     # @param ctx [Restate::Context]
   #     handler def greet(ctx, name)
   #       "Hello, #{name}!"
   #     end
