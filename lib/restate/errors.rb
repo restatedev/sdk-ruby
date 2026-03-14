@@ -2,7 +2,10 @@
 # frozen_string_literal: true
 
 module Restate
-  # Raised to indicate that Restate should not retry this invocation.
+  # Raised to indicate a non-retryable failure. Restate will not retry the invocation.
+  #
+  # @example
+  #   raise Restate::TerminalError.new('not found', status_code: 404)
   class TerminalError < StandardError
     extend T::Sig
 

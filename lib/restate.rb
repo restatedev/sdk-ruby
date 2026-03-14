@@ -17,31 +17,44 @@ require_relative 'restate/durable_future'
 require_relative 'restate/discovery'
 require_relative 'restate/endpoint'
 
+# Restate Ruby SDK — build resilient applications with durable execution.
 module Restate
   extend T::Sig
 
   module_function
 
-  # Create a new Service.
+  # Create a new instance-based stateless Service.
+  #
+  # @param name [String] the service name
+  # @return [Service]
   sig { params(name: String, opts: T.untyped).returns(Service) }
   def service(name, **opts)
     Service.new(name, **opts)
   end
 
-  # Create a new VirtualObject.
+  # Create a new instance-based VirtualObject.
+  #
+  # @param name [String] the virtual object name
+  # @return [VirtualObject]
   sig { params(name: String, opts: T.untyped).returns(VirtualObject) }
   def virtual_object(name, **opts)
     VirtualObject.new(name, **opts)
   end
 
-  # Create a new Workflow.
+  # Create a new instance-based Workflow.
+  #
+  # @param name [String] the workflow name
+  # @return [Workflow]
   sig { params(name: String, opts: T.untyped).returns(Workflow) }
   def workflow(name, **opts)
     Workflow.new(name, **opts)
   end
 
-  # Create an endpoint binding services, and return the Rack app.
-  # Accepts both class-based services (e.g. Counter) and instance-based services.
+  # Create an endpoint, optionally binding services.
+  # Returns an Endpoint that can be further configured before calling +.app+.
+  #
+  # @param services [Array<Class>] service classes or instances to bind
+  # @return [Endpoint]
   sig do
     params(
       services: T.untyped,

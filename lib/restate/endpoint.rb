@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -23,7 +23,12 @@ module Restate
     end
 
     # Bind one or more services to this endpoint.
-    # Accepts both class-based services (e.g. Counter) and instance-based (e.g. Restate.virtual_object("Counter")).
+    # Accepts both class-based services (e.g. +Counter+) and instance-based.
+    #
+    # @param svcs [Array<Class, Service, VirtualObject, Workflow>] services to bind
+    # @return [self]
+    # @raise [ArgumentError] if a service with the same name is already bound
+    sig { params(svcs: T.untyped).returns(T.self_type) }
     def bind(*svcs)
       svcs.each do |svc|
         svc_name = svc.respond_to?(:service_name) ? svc.service_name : svc.name

@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -27,18 +27,26 @@ module Restate
     # -- Class-level DSL (for subclasses) --
 
     # Register the main workflow entry point.
+    # Use as: +main def run(ctx, arg)+ or +main :run, input: String+
+    #
+    # @param method_name [Symbol] name of the method to register
+    # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
+    # @return [Symbol] the method name
     def self.main(method_name = nil, **opts)
-      return _instance_main(method_name, **opts) { |*args| yield(*args) } if block_given?
       return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, kind: 'workflow', **opts)
+      _register_handler(method_name, **T.unsafe({ kind: 'workflow', **opts }))
     end
 
-    # Register a shared handler.
+    # Register a shared handler on this workflow.
+    #
+    # @param method_name [Symbol] name of the method to register
+    # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
+    # @return [Symbol] the method name
     def self.handler(method_name = nil, **opts)
-      return super unless method_name.is_a?(Symbol)
+      return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, kind: 'shared', **opts)
+      _register_handler(method_name, **T.unsafe({ kind: 'shared', **opts }))
     end
 
     def self._service_kind
@@ -67,11 +75,19 @@ module Restate
       @service_tag.name
     end
 
+    # Returns the service name.
+    sig { returns(String) }
     def service_name
       name
     end
 
     # Register the main workflow entry point (instance-based API).
+    #
+    # @param name [String] the handler name
+    # @param input [Class, #serialize, nil] type or serde for input deserialization
+    # @param output [Class, #serialize, nil] type or serde for output serialization
+    # @yield [ctx, input] the handler block
+    # @return [self]
     def main(name, accept: 'application/json', content_type: 'application/json',
              input: nil, output: nil, &block)
       handler_io = HandlerIO.new(
@@ -92,6 +108,12 @@ module Restate
     end
 
     # Register a shared handler (instance-based API).
+    #
+    # @param name [String] the handler name
+    # @param input [Class, #serialize, nil] type or serde for input deserialization
+    # @param output [Class, #serialize, nil] type or serde for output serialization
+    # @yield [ctx, input] the handler block
+    # @return [self]
     def handler(name, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)
       handler_io = HandlerIO.new(

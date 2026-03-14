@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -28,14 +28,24 @@ module Restate
 
     # -- Class-level DSL (for subclasses) --
 
+    # Register an exclusive handler. Use as: +handler def my_method(ctx, arg)+
+    #
+    # @param method_name [Symbol] name of the method to register
+    # @param kind [Symbol] concurrency mode (+:exclusive+ or +:shared+)
+    # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
+    # @return [Symbol] the method name
     def self.handler(method_name = nil, kind: :exclusive, **opts)
-      return super unless method_name.is_a?(Symbol)
+      return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, kind: kind.to_s, **opts)
+      _register_handler(method_name, **T.unsafe({ kind: kind.to_s, **opts }))
     end
 
+    # Register a shared (concurrent-access) handler.
+    #
+    # @param method_name [Symbol] name of the method to register
+    # @return [Symbol] the method name
     def self.shared(method_name, **opts)
-      _register_handler(method_name, kind: 'shared', **opts)
+      _register_handler(method_name, **T.unsafe({ kind: 'shared', **opts }))
     end
 
     def self._service_kind
@@ -64,11 +74,20 @@ module Restate
       @service_tag.name
     end
 
+    # Returns the service name.
+    sig { returns(String) }
     def service_name
       name
     end
 
-    # Register a handler (instance-based API).
+    # Register a handler on this instance-based virtual object.
+    #
+    # @param name [String] the handler name
+    # @param kind [Symbol] concurrency mode (+:exclusive+ or +:shared+)
+    # @param input [Class, #serialize, nil] type or serde for input deserialization
+    # @param output [Class, #serialize, nil] type or serde for output serialization
+    # @yield [ctx, input] the handler block
+    # @return [self]
     def handler(name, kind: :exclusive, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)
       handler_io = HandlerIO.new(

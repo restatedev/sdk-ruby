@@ -38,6 +38,7 @@ module Restate
 
     # ── Main entry point ──
 
+    # Runs the handler to completion, writing the output (or failure) to the journal.
     sig { void }
     def enter
       in_buffer = @invocation.input_buffer
@@ -77,6 +78,7 @@ module Restate
 
     # ── State operations ──
 
+    # Durably retrieves a state entry by name. Returns nil if unset.
     sig { params(name: String, serde: T.untyped).returns(T.untyped) }
     def get(name, serde: JsonSerde)
       handle = @vm.sys_get_state(name)
@@ -85,21 +87,25 @@ module Restate
       end
     end
 
+    # Durably sets a state entry. The value is serialized via +serde+.
     sig { params(name: String, value: T.untyped, serde: T.untyped).void }
     def set(name, value, serde: JsonSerde)
       @vm.sys_set_state(name, serde.serialize(value).b)
     end
 
+    # Durably removes a single state entry by name.
     sig { params(name: String).void }
     def clear(name)
       @vm.sys_clear_state(name)
     end
 
+    # Durably removes all state entries for this virtual object or workflow.
     sig { void }
     def clear_all
       @vm.sys_clear_all_state
     end
 
+    # Returns the list of all state entry names for this virtual object or workflow.
     sig { returns(T.untyped) }
     def state_keys
       handle = @vm.sys_get_state_keys
@@ -108,6 +114,8 @@ module Restate
 
     # ── Sleep ──
 
+    # Returns a durable future that completes after the given duration.
+    # The timer survives handler restarts.
     sig { params(seconds: Numeric).returns(DurableFuture) }
     def sleep(seconds)
       millis = (seconds * 1000).to_i
@@ -159,6 +167,8 @@ module Restate
 
     # ── Durable run (side effect) ──
 
+    # Executes a durable side effect. The block runs at most once; its result is
+    # journaled and replayed on retries. Returns a DurableFuture for the result.
     sig do
       params(
         name: String,
@@ -195,6 +205,7 @@ module Restate
 
     # ── Service calls ──
 
+    # Durably calls a handler on a Restate service and returns a future for its result.
     sig do
       params(
         service: T.any(String, T::Class[T.anything]),
@@ -221,6 +232,7 @@ module Restate
                             output_serde: out_serde)
     end
 
+    # Sends a one-way invocation to a Restate service handler (fire-and-forget).
     sig do
       params(
         service: T.any(String, T::Class[T.anything]),
@@ -246,6 +258,7 @@ module Restate
       SendHandle.new(self, invocation_id_handle)
     end
 
+    # Durably calls a handler on a Restate virtual object, keyed by +key+.
     sig do
       params(
         service: T.any(String, T::Class[T.anything]),
@@ -272,6 +285,7 @@ module Restate
                             output_serde: out_serde)
     end
 
+    # Sends a one-way invocation to a Restate virtual object handler (fire-and-forget).
     sig do
       params(
         service: T.any(String, T::Class[T.anything]),
@@ -297,6 +311,7 @@ module Restate
       SendHandle.new(self, invocation_id_handle)
     end
 
+    # Durably calls a handler on a Restate workflow, keyed by +key+.
     sig do
       params(
         service: T.any(String, T::Class[T.anything]),
@@ -315,6 +330,7 @@ module Restate
                   input_serde: input_serde, output_serde: output_serde) # rubocop:disable Layout/HashAlignment
     end
 
+    # Sends a one-way invocation to a Restate workflow handler (fire-and-forget).
     sig do
       params(
         service: T.any(String, T::Class[T.anything]),
@@ -394,6 +410,7 @@ module Restate
 
     # ── Cancel invocation ──
 
+    # Requests cancellation of another invocation by its id.
     sig { params(invocation_id: String).void }
     def cancel_invocation(invocation_id)
       @vm.sys_cancel_invocation(invocation_id)
@@ -401,6 +418,7 @@ module Restate
 
     # ── Generic calls (raw bytes, no serde) ──
 
+    # Durably calls a handler using raw bytes (no serialization). Useful for proxying.
     sig do
       params(
         service: String,
@@ -420,6 +438,7 @@ module Restate
                             output_serde: nil)
     end
 
+    # Sends a one-way invocation using raw bytes (no serialization). Useful for proxying.
     sig do
       params(
         service: String,
@@ -442,6 +461,7 @@ module Restate
 
     # ── Request metadata ──
 
+    # Returns metadata about the current invocation (id, headers, raw body).
     sig { returns(T.untyped) }
     def request
       Request.new(
@@ -451,6 +471,7 @@ module Restate
       )
     end
 
+    # Returns the key for this virtual object or workflow invocation.
     sig { returns(String) }
     def key
       @invocation.key

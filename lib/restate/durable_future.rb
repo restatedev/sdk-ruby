@@ -2,7 +2,8 @@
 # frozen_string_literal: true
 
 module Restate
-  # A durable future wrapping a VM handle. Lazily resolves on first `await` and caches the result.
+  # A durable future wrapping a VM handle. Lazily resolves on first +await+ and caches the result.
+  # Returned by +ctx.run+ and +ctx.sleep+.
   class DurableFuture
     extend T::Sig
 
@@ -18,6 +19,9 @@ module Restate
       @value = T.let(nil, T.untyped)
     end
 
+    # Block until the result is available and return it. Caches across calls.
+    #
+    # @return [Object] the deserialized result
     sig { returns(T.untyped) }
     def await
       unless @resolved
@@ -28,13 +32,18 @@ module Restate
       @value
     end
 
+    # Check whether the future has completed (non-blocking).
+    #
+    # @return [Boolean]
     sig { returns(T::Boolean) }
     def completed?
       @resolved || @ctx.completed?(@handle)
     end
   end
 
-  # A durable future for service/object/workflow calls. Adds invocation_id and cancel.
+  # A durable future for service/object/workflow calls.
+  # Adds +invocation_id+ and +cancel+ on top of DurableFuture.
+  # Returned by +ctx.service_call+, +ctx.object_call+, +ctx.workflow_call+.
   class DurableCallFuture < DurableFuture
     extend T::Sig
 
@@ -54,6 +63,7 @@ module Restate
       @invocation_id_value = T.let(nil, T.untyped)
     end
 
+    # Block until the result is available and return it. Deserializes via +output_serde+.
     sig { returns(T.untyped) }
     def await
       unless @resolved
@@ -68,6 +78,9 @@ module Restate
       @value
     end
 
+    # Returns the invocation ID of the remote call. Lazily resolved.
+    #
+    # @return [String] the invocation ID
     sig { returns(String) }
     def invocation_id
       unless @invocation_id_resolved
@@ -77,13 +90,15 @@ module Restate
       T.must(@invocation_id_value)
     end
 
+    # Cancel the remote invocation.
     sig { void }
     def cancel
       @ctx.cancel_invocation(invocation_id)
     end
   end
 
-  # A handle for fire-and-forget send operations. Provides invocation_id and cancel.
+  # A handle for fire-and-forget send operations.
+  # Returned by +ctx.service_send+, +ctx.object_send+, +ctx.workflow_send+.
   class SendHandle
     extend T::Sig
 
@@ -95,6 +110,9 @@ module Restate
       @invocation_id_value = T.let(nil, T.untyped)
     end
 
+    # Returns the invocation ID of the sent call. Lazily resolved.
+    #
+    # @return [String] the invocation ID
     sig { returns(String) }
     def invocation_id
       unless @invocation_id_resolved
@@ -104,6 +122,7 @@ module Restate
       T.must(@invocation_id_value)
     end
 
+    # Cancel the remote invocation.
     sig { void }
     def cancel
       @ctx.cancel_invocation(invocation_id)

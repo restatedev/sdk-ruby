@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -22,12 +22,16 @@ module Restate
 
     # -- Class-level DSL (for subclasses) --
 
-    # @!method self.handler(method_name, **opts)
-    #   Register a handler. Use as: `handler def my_method(ctx, arg)`
+    # Register a handler method on this service.
+    # Use as: +handler def my_method(ctx, arg)+ or +handler :my_method, input: String+
+    #
+    # @param method_name [Symbol] name of the method to register
+    # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
+    # @return [Symbol] the method name
     def self.handler(method_name = nil, **opts)
-      return super unless method_name.is_a?(Symbol)
+      return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, kind: nil, **opts)
+      _register_handler(method_name, **T.unsafe({ kind: nil, **opts }))
     end
 
     def self._service_kind
@@ -56,12 +60,19 @@ module Restate
       @service_tag.name
     end
 
-    # Alias for compatibility: both class-based and instance-based use service_name
+    # Returns the service name.
+    sig { returns(String) }
     def service_name
       name
     end
 
-    # Register a handler (instance-based API).
+    # Register a handler on this instance-based service.
+    #
+    # @param name [String] the handler name
+    # @param input [Class, #serialize, nil] type or serde for input deserialization
+    # @param output [Class, #serialize, nil] type or serde for output serialization
+    # @yield [ctx, input] the handler block
+    # @return [self]
     def handler(name, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)
       handler_io = HandlerIO.new(

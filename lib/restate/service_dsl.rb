@@ -1,13 +1,13 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 module Restate
   # Shared class-level DSL for defining Restate services via class inheritance.
   #
-  # Extended into Service, VirtualObject, and Workflow. Provides the `handler`,
-  # `shared`, `main`, and `service_name` class macros.
+  # Extended into Service, VirtualObject, and Workflow. Provides the +handler+,
+  # +shared+, +main+, and +service_name+ class macros.
   #
-  # Example:
+  # @example
   #   class Counter < Restate::VirtualObject
   #     handler def add(ctx, addend)
   #       old = ctx.get('counter') || 0
@@ -16,6 +16,7 @@ module Restate
   #     end
   #   end
   module ServiceDSL
+    # Called when a subclass is created; initializes the handler registry.
     def inherited(subclass)
       super
       subclass.instance_variable_set(:@_handler_registry, {})
@@ -24,22 +25,29 @@ module Restate
     end
 
     # Get or set the service name. Defaults to the unqualified class name.
+    #
+    # @param name [String, nil] when provided, sets the service name
+    # @return [String] the current service name
     def service_name(name = nil)
       if name
         @_service_name = name
       else
-        @_service_name || self.name&.split('::')&.last
+        @_service_name || T.unsafe(self).name&.split('::')&.last
       end
     end
 
     # Returns the ServiceTag for this class-based service.
-    # Subclasses (Service, VirtualObject, Workflow) must define `_service_kind`.
+    # Subclasses must define +_service_kind+.
+    #
+    # @return [ServiceTag]
     def service_tag
-      ServiceTag.new(kind: _service_kind, name: service_name)
+      ServiceTag.new(kind: T.unsafe(self)._service_kind, name: service_name)
     end
 
-    # Returns a hash of handler name (String) => Handler struct.
+    # Returns a hash of handler name (String) to Handler.
     # Built lazily on first access and cached.
+    #
+    # @return [Hash{String => Handler}]
     def handlers
       @_handlers ||= _build_handlers # rubocop:disable Naming/MemoizedInstanceVariableName
     end
@@ -69,8 +77,8 @@ module Restate
           output_serde: output_serde
         )
 
-        um = instance_method(name)
-        bound = um.bind(allocate)
+        um = T.unsafe(self).instance_method(name)
+        bound = um.bind(T.unsafe(self).allocate)
 
         result[name] = Handler.new(
           service_tag: tag,
