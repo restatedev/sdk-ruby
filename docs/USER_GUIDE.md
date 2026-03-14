@@ -543,6 +543,87 @@ curl http://localhost:9070/deployments \
 
 ---
 
+## Testing
+
+The SDK ships a test harness that starts a real Restate server via Docker, serves your services
+on a local Falcon server, and registers them automatically. No external setup is needed — just
+Docker.
+
+Opt-in with `require 'restate/testing'`. Add `testcontainers-core` to your Gemfile:
+
+```ruby
+gem 'testcontainers-core', require: false
+```
+
+### Block-Based (Recommended)
+
+```ruby
+require 'restate/testing'
+
+Restate::Testing.start(Greeter, Counter) do |env|
+  # env.ingress_url  => "http://localhost:32771"
+  # env.admin_url    => "http://localhost:32772"
+
+  uri = URI("#{env.ingress_url}/Greeter/greet")
+  request = Net::HTTP::Post.new(uri)
+  request['Content-Type'] = 'application/json'
+  request.body = '"World"'
+  response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
+  puts response.body  # => "Hello, World!"
+end
+# Container and server are automatically cleaned up.
+```
+
+### Manual Lifecycle (for RSpec hooks)
+
+```ruby
+require 'restate/testing'
+
+RSpec.describe 'my services' do
+  before(:all) do
+    @harness = Restate::Testing::RestateTestHarness.new(Greeter, Counter)
+    @harness.start
+  end
+
+  after(:all) do
+    @harness&.stop
+  end
+
+  it 'greets' do
+    uri = URI("#{@harness.ingress_url}/Greeter/greet")
+    request = Net::HTTP::Post.new(uri)
+    request['Content-Type'] = 'application/json'
+    request.body = '"World"'
+    response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
+    expect(JSON.parse(response.body)).to eq('Hello, World!')
+  end
+end
+```
+
+### Configuration Options
+
+All options are keyword arguments on both `start` and `RestateTestHarness.new`:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `restate_image:` | `"docker.io/restatedev/restate:latest"` | Docker image for Restate server |
+| `always_replay:` | `false` | Force replay on every suspension point (useful for catching non-determinism bugs) |
+| `disable_retries:` | `false` | Disable Restate retry policy |
+
+```ruby
+Restate::Testing.start(MyService, always_replay: true, disable_retries: true) do |env|
+  # ...
+end
+```
+
+### Running Harness Tests
+
+```bash
+make test-harness  # Requires Docker
+```
+
+---
+
 ## URL Patterns
 
 | Service Type | URL Pattern | Example |

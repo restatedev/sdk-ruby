@@ -40,6 +40,7 @@ Metrics/ClassLength:
   Exclude:
     - "lib/restate/server.rb"
     - "lib/restate/server_context.rb"
+    - "lib/restate/testing.rb"
     - "lib/restate/vm.rb"
 
 Metrics/MethodLength:
@@ -49,6 +50,7 @@ Metrics/MethodLength:
     - "lib/restate/server.rb"
     - "lib/restate/server_context.rb"
     - "lib/restate/service.rb"
+    - "lib/restate/testing.rb"
     - "lib/restate/virtual_object.rb"
     - "lib/restate/vm.rb"
     - "lib/restate/workflow.rb"

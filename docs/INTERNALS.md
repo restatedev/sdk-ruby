@@ -53,12 +53,17 @@ lib/
     ├── service.rb                   Stateless Service class + handler DSL
     ├── service_dsl.rb               Shared class-level DSL (inherited by all service types)
     ├── virtual_object.rb            VirtualObject class + handler/shared DSL
+    ├── testing.rb                   Test harness (opt-in: require 'restate/testing')
     ├── vm.rb                        VMWrapper — Ruby bridge to native VM
     └── workflow.rb                  Workflow class + main/handler DSL
 
 ext/restate_internal/
 ├── Cargo.toml                       Depends on restate-sdk-shared-core 0.7.0, magnus 0.7
 └── src/lib.rs                       Rust ↔ Ruby bindings (~1095 lines)
+
+spec/
+├── spec_helper.rb                   Minimal RSpec config
+└── harness_spec.rb                  Integration tests using Restate::Testing harness
 
 test-services/                       Integration test services (for sdk-test-suite)
 ├── Dockerfile                       Multi-stage: build native ext → run Falcon
@@ -231,6 +236,26 @@ Generates the JSON manifest returned at `GET /discover`. Maps internal types to 
 - Handler kinds: `exclusive`→`EXCLUSIVE`, `shared`→`SHARED`, `workflow`→`WORKFLOW`
 - Protocol mode: `bidi`→`BIDI_STREAM`, `request_response`→`REQUEST_RESPONSE`
 - Protocol versions: min=5, max=5
+
+### Test Harness (`lib/restate/testing.rb`)
+
+Opt-in module (`require 'restate/testing'`) that provides self-contained integration testing.
+Three components:
+
+1. **SDK Server** — Falcon in a background `Thread` with its own `Async` event loop. Finds a free
+   port via `TCPServer.new('0.0.0.0', 0)`, starts `Falcon::Server` with the Rack app, and polls
+   TCP connect for readiness.
+
+2. **Restate Container** — `RestateContainer` subclass of `Testcontainers::DockerContainer` that
+   overrides `_container_create_options` to inject `ExtraHosts: ["host.docker.internal:host-gateway"]`.
+   This lets the container reach the host-bound SDK server. Exposed ports 8080 (ingress) and 9070
+   (admin) are mapped to random host ports. Environment variables match the Python harness
+   configuration (partition config, invoker timeouts, always_replay, disable_retries).
+
+3. **Registration** — `Net::HTTP` POST to `{admin_url}/deployments` with the SDK URL
+   (`http://host.docker.internal:{port}`).
+
+Cleanup kills the server thread and force-stops/removes the container.
 
 ---
 
@@ -475,6 +500,18 @@ Currently `exclusions.yaml` has no exclusions — all test suites pass with no s
 ```
 
 Requires Docker and Java 21+. The test JAR is cached in `tmp/`.
+
+### Harness Tests (`spec/harness_spec.rb`)
+
+Separate from the sdk-test-suite, these use `Restate::Testing` to test services in-process.
+Three tests cover stateless services, virtual object state persistence, and service-to-service
+calls.
+
+```bash
+make test-harness  # or: bundle exec rspec spec/harness_spec.rb
+```
+
+Requires Docker only (no Java).
 
 ### Environment Variables
 
