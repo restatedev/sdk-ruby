@@ -114,7 +114,7 @@ RSpec.describe Restate::Testing do
     expect(JSON.parse(response.body)).to eq(5)
   end
 
-  it "runs a durable block with run_sync (thread-offloaded)" do
+  it "runs a durable block with run_sync" do
     response = post_json(@harness.ingress_url, "/TestRunSync/compute", 21)
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("result:42")

@@ -28,23 +28,26 @@ module Restate
 
     # Execute a durable side effect. The block runs at most once; the result
     # is journaled and replayed on retries.
+    #
+    # Pass +background: true+ to offload the block to a real OS Thread,
+    # keeping the fiber event loop responsive for CPU-intensive work.
     sig do
       abstract.params(
         name: String, serde: T.untyped, retry_policy: T.nilable(RunRetryPolicy),
-        action: T.proc.returns(T.untyped)
+        background: T::Boolean, action: T.proc.returns(T.untyped)
       ).returns(DurableFuture)
     end
-    def run(name, serde: JsonSerde, retry_policy: nil, &action); end
+    def run(name, serde: JsonSerde, retry_policy: nil, background: false, &action); end
 
-    # Like +run+, but offloads the block to a real OS Thread and returns the
-    # value directly. Use for CPU-intensive work.
+    # Convenience shortcut for +run(...).await+. Returns the result directly.
+    # Accepts all the same options as +run+, including +background: true+.
     sig do
       abstract.params(
         name: String, serde: T.untyped, retry_policy: T.nilable(RunRetryPolicy),
-        action: T.proc.returns(T.untyped)
+        background: T::Boolean, action: T.proc.returns(T.untyped)
       ).returns(T.untyped)
     end
-    def run_sync(name, serde: JsonSerde, retry_policy: nil, &action); end
+    def run_sync(name, serde: JsonSerde, retry_policy: nil, background: false, &action); end
 
     # Durable timer that survives handler restarts.
     sig { params(seconds: Numeric).returns(DurableFuture) }

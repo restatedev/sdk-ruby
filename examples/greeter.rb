@@ -28,7 +28,8 @@ require 'restate'
 class Greeter < Restate::Service
   handler :greet, input: String, output: String
   def greet(ctx, name)
-    ctx.run('build-greeting') { "Hello, #{name}!" }.await
+    # run_sync: durable side effect, returns the value directly
+    ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   end
 
   handler def greetAndRemember(ctx, name) # rubocop:disable Naming/MethodName
@@ -68,16 +69,14 @@ end
 class Signup < Restate::Workflow # rubocop:disable Style/OneClassPerFile
   main def run(ctx, email)
     # Step 1: create the user (durable side effect)
-    user_id = (ctx.run('create-user') do
-      # Simulate creating a user in a database
+    user_id = ctx.run_sync('create-user') do
       "user_#{email.gsub(/[^a-zA-Z0-9]/, '_')}"
-    end).await
+    end
 
     # Step 2: send welcome email
-    (ctx.run('send-email') do
-      # Simulate sending an email
+    ctx.run_sync('send-email') do
       puts "Sending welcome email to #{email}"
-    end).await
+    end
 
     # Step 3: store the result
     ctx.set('status', 'completed')

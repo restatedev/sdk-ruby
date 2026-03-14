@@ -34,10 +34,10 @@
 require 'restate'
 
 class UserSignup < Restate::Workflow
-  main def run(ctx, email) # rubocop:disable Metrics/MethodLength
-    user_id = (ctx.run('create-account') do
+  main def run(ctx, email)
+    user_id = ctx.run_sync('create-account') do
       "user_#{email.gsub(/[^a-zA-Z0-9]/, '_')}"
-    end).await
+    end
 
     ctx.set('status', 'waiting_for_approval')
 
@@ -46,9 +46,7 @@ class UserSignup < Restate::Workflow
     ctx.set('status', 'approved')
 
     # Activate account
-    (ctx.run('activate') do
-      puts "Activating #{user_id} — #{approval}"
-    end).await
+    ctx.run_sync('activate') { puts "Activating #{user_id} — #{approval}" }
 
     ctx.set('status', 'active')
     { 'user_id' => user_id, 'email' => email, 'approval' => approval }

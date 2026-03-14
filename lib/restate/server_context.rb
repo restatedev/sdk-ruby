@@ -170,38 +170,43 @@ module Restate
 
     # Executes a durable side effect. The block runs at most once; its result is
     # journaled and replayed on retries. Returns a DurableFuture for the result.
+    #
+    # Pass +background: true+ to run the block in a real OS Thread, keeping the
+    # fiber event loop responsive for other concurrent handlers. Use this for
+    # CPU-intensive work.
     sig do
       override.params(
         name: String,
         serde: T.untyped,
         retry_policy: T.nilable(RunRetryPolicy),
+        background: T::Boolean,
         action: T.proc.returns(T.untyped)
       ).returns(DurableFuture)
     end
-    def run(name, serde: JsonSerde, retry_policy: nil, &action)
+    def run(name, serde: JsonSerde, retry_policy: nil, background: false, &action)
       handle = @vm.sys_run(name)
 
-      @run_coros_to_execute[handle] = -> { execute_run(handle, action, serde, retry_policy) }
+      executor = background ? :execute_run_threaded : :execute_run
+      @run_coros_to_execute[handle] = -> { send(executor, handle, action, serde, retry_policy) }
 
       DurableFuture.new(self, handle, serde: serde)
     end
 
-    # Like `run`, but executes the block in a real OS Thread and returns the value directly.
-    # Use this for CPU-intensive work that would otherwise block the fiber event loop.
+    # Convenience shortcut for +run(...).await+ — executes the durable side effect
+    # and returns the result directly.
+    #
+    # Accepts all the same options as +run+, including +background: true+.
     sig do
       override.params(
         name: String,
         serde: T.untyped,
         retry_policy: T.nilable(RunRetryPolicy),
+        background: T::Boolean,
         action: T.proc.returns(T.untyped)
       ).returns(T.untyped)
     end
-    def run_sync(name, serde: JsonSerde, retry_policy: nil, &action)
-      handle = @vm.sys_run(name)
-
-      @run_coros_to_execute[handle] = -> { execute_run_threaded(handle, action, serde, retry_policy) }
-
-      DurableFuture.new(self, handle, serde: serde).await
+    def run_sync(name, serde: JsonSerde, retry_policy: nil, background: false, &action)
+      run(name, serde: serde, retry_policy: retry_policy, background: background, &action).await
     end
 
     # ── Service calls ──

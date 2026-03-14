@@ -154,8 +154,9 @@ The `ctx` object passed to every handler. Implements:
   `wait_any`.
 - **Low-level handle API** (used by test services) — `resolve_handle`, `wait_any_handle`,
   `completed?`, `take_completed`.
-- **Run execution** — spawns durable side effects as Async child tasks. `run` uses fibers;
-  `run_sync` offloads to a real OS Thread via `offload_to_thread` (IO.pipe-based fiber yield).
+- **Run execution** — spawns durable side effects as Async child tasks. `run` uses fibers by
+  default; pass `background: true` to offload to a real OS Thread via `offload_to_thread`
+  (IO.pipe-based fiber yield). `run_sync` is a shortcut for `run(...).await`.
 
 ### Service Types
 
@@ -476,11 +477,11 @@ When user code calls `ctx.run('name') { ... }`:
 **During replay**, the VM already has the result from the journal. `do_progress` returns
 `AnyCompleted` directly — the action block is never executed.
 
-### `run_sync` (Thread-Offloaded Variant)
+### Background Runs (`background: true`)
 
-`ctx.run_sync('name') { ... }` has the same durable semantics as `ctx.run` but offloads the
-user's block to a real OS Thread. This prevents CPU-intensive work from blocking the
-fiber event loop (which would starve all other concurrent handler invocations).
+`ctx.run('name', background: true) { ... }` has the same durable semantics as a normal `run`
+but offloads the user's block to a real OS Thread. This prevents CPU-intensive work from
+blocking the fiber event loop (which would starve all other concurrent handler invocations).
 
 The mechanism uses `offload_to_thread`:
 1. Creates an `IO.pipe`
@@ -489,7 +490,10 @@ The mechanism uses `offload_to_thread`:
 4. When the thread closes the pipe, the fiber resumes
 5. VM calls (`propose_run_completion_*`) happen on the fiber, preserving thread safety
 
-`run_sync` auto-awaits the future, returning the value directly (no `.await` needed).
+### `run_sync`
+
+`ctx.run_sync(...)` is a convenience shortcut for `ctx.run(...).await`. It accepts all the
+same parameters (including `background: true`) and returns the value directly.
 
 ---
 

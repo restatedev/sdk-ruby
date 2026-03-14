@@ -25,9 +25,9 @@ require 'restate'
 # A simple worker that simulates processing a task.
 class Worker < Restate::Service
   handler def process(ctx, task)
-    (ctx.run('do-work') do
+    ctx.run_sync('do-work') do
       { 'task' => task, 'result' => "completed_#{task}" }
-    end).await
+    end
   end
 end
 
@@ -64,9 +64,9 @@ class FanOut < Restate::Service # rubocop:disable Style/OneClassPerFile
     awakeable_id, future = ctx.awakeable
 
     # Send the awakeable ID to an external system (via a side effect)
-    (ctx.run('notify-external') do
+    ctx.run_sync('notify-external') do
       puts "External system should POST to Restate to resolve: #{awakeable_id}"
-    end).await
+    end
 
     # Block until the external system resolves the awakeable
     callback_result = future.await

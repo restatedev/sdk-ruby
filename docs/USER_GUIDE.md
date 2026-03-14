@@ -16,8 +16,7 @@ require 'restate'
 
 class Greeter < Restate::Service
   handler def greet(ctx, name)
-    greeting = ctx.run('build-greeting') { "Hello, #{name}!" }.await
-    greeting
+    ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   end
 end
 
@@ -98,7 +97,7 @@ query state and send signals.
 ```ruby
 class UserSignup < Restate::Workflow
   main def run(ctx, email)
-    user_id = ctx.run('create-account') { create_user(email) }.await
+    user_id = ctx.run_sync('create-account') { create_user(email) }
     ctx.set('status', 'waiting_for_approval')
 
     # Block until approve() is called
@@ -137,8 +136,16 @@ journal without re-executing.
 Execute a side effect exactly once. The result is durably recorded — on retry, the block is
 skipped and the stored result is returned.
 
+`run` returns a `DurableFuture`; call `.await` to get the result. Use `run_sync` to get
+the value directly:
+
 ```ruby
-result = ctx.run('step-name') { do_something() }.await
+# Returns a future — useful for fan-out (see below)
+future = ctx.run('step-name') { do_something() }
+result = future.await
+
+# Returns the value directly — convenient for sequential steps
+result = ctx.run_sync('step-name') { do_something() }
 ```
 
 **With retry policy:**
@@ -151,27 +158,25 @@ policy = Restate::RunRetryPolicy.new(
   max_duration: 60_000       # ms total duration cap
 )
 
-result = ctx.run('flaky-call', retry_policy: policy) { call_external_api() }.await
+result = ctx.run_sync('flaky-call', retry_policy: policy) { call_external_api() }
 ```
 
 **Terminal errors** (non-retryable):
 ```ruby
-ctx.run('validate') do
+ctx.run_sync('validate') do
   raise Restate::TerminalError.new('invalid input', status_code: 400)
-end.await
+end
 ```
 
-**Thread-offloaded run** (`ctx.run_sync`):
+**Background thread** (`background: true`):
 
-For CPU-intensive work that would block the fiber event loop, use `run_sync`. It executes the
-block in a real OS Thread, keeping the event loop responsive for other concurrent handler
-invocations. Returns the value directly (no `.await` needed).
+For CPU-intensive work that would block the fiber event loop, pass `background: true`.
+The block runs in a real OS Thread, keeping the event loop responsive for other concurrent
+handler invocations. Works with both `run` and `run_sync`:
 
 ```ruby
-result = ctx.run_sync('heavy-computation') { expensive_calculation() }
+result = ctx.run_sync('heavy', background: true) { expensive_calculation() }
 ```
-
-Same durable semantics as `ctx.run` — the result is journaled and replayed on retry.
 
 ### State Operations
 
@@ -290,7 +295,7 @@ Pause a handler until an external system calls back via Restate's API.
 awakeable_id, future = ctx.awakeable
 
 # Send the ID to an external system
-ctx.run('notify') { send_to_external_system(awakeable_id) }.await
+ctx.run_sync('notify') { send_to_external_system(awakeable_id) }
 
 # Block until the external system resolves it
 result = future.await
@@ -646,7 +651,7 @@ by adding a `@param` tag:
 class Greeter < Restate::Service
   # @param ctx [Restate::Context]
   handler def greet(ctx, name)
-    ctx.run('step') { "Hello, #{name}!" }.await
+    ctx.run_sync('step') { "Hello, #{name}!" }
   end
 end
 ```
@@ -801,7 +806,7 @@ The `examples/` directory contains runnable examples:
 | File | Shows |
 |------|-------|
 | `greeter.rb` | Overview: Service, VirtualObject, Workflow in one file |
-| `durable_execution.rb` | `ctx.run`, `RunRetryPolicy`, `TerminalError` |
+| `durable_execution.rb` | `ctx.run`, `ctx.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
 | `virtual_objects.rb` | State ops, `handler` vs `shared`, `state_keys`, `clear_all` |
 | `workflow.rb` | Promises, signals, workflow state |
 | `service_communication.rb` | Calls, sends, fan-out/fan-in, `wait_any`, awakeables |
@@ -846,8 +851,8 @@ ctx.clear_all
 ctx.state_keys → Array[String]
 
 # Durable execution
-ctx.run(name, retry_policy: nil) { block } → DurableFuture
-ctx.run_sync(name, retry_policy: nil) { block } → value  # Thread-offloaded
+ctx.run(name, background: false) { block } → DurableFuture
+ctx.run_sync(name, background: false) { block } → value   # run + await
 ctx.sleep(seconds) → DurableFuture
 
 # Service calls
