@@ -3,23 +3,23 @@
 
 require 'restate'
 
-BLOCK_AND_WAIT_WORKFLOW = Restate.workflow('BlockAndWaitWorkflow')
+class BlockAndWaitWorkflow < Restate::Workflow
+  main def run(ctx, input)
+    ctx.set('my-state', input)
+    output = ctx.promise('durable-promise')
 
-BLOCK_AND_WAIT_WORKFLOW.main('run') do |ctx, input|
-  ctx.set('my-state', input)
-  output = ctx.promise('durable-promise')
+    peek = ctx.peek_promise('durable-promise')
+    raise Restate::TerminalError, 'Durable promise should be completed' if peek.nil?
 
-  peek = ctx.peek_promise('durable-promise')
-  raise Restate::TerminalError, 'Durable promise should be completed' if peek.nil?
+    output
+  end
 
-  output
-end
+  handler def unblock(ctx, output)
+    ctx.resolve_promise('durable-promise', output)
+    nil
+  end
 
-BLOCK_AND_WAIT_WORKFLOW.handler('unblock') do |ctx, output|
-  ctx.resolve_promise('durable-promise', output)
-  nil
-end
-
-BLOCK_AND_WAIT_WORKFLOW.handler('getState') do |ctx, _output|
-  ctx.get('my-state')
+  handler def getState(ctx, _output) # rubocop:disable Naming/MethodName
+    ctx.get('my-state')
+  end
 end

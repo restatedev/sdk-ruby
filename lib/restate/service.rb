@@ -1,16 +1,40 @@
-# typed: true
+# typed: false
 # frozen_string_literal: true
 
 module Restate
   # A stateless Restate service.
   #
-  # Example:
+  # Class-based API (preferred):
+  #   class Greeter < Restate::Service
+  #     handler def greet(ctx, name)
+  #       "Hello, #{name}!"
+  #     end
+  #   end
+  #
+  # Instance-based API (legacy, still supported):
   #   greeter = Restate::Service.new("Greeter")
   #   greeter.handler("greet") do |ctx, name|
   #     "Hello, #{name}!"
   #   end
   class Service
     extend T::Sig
+    extend ServiceDSL
+
+    # -- Class-level DSL (for subclasses) --
+
+    # @!method self.handler(method_name, **opts)
+    #   Register a handler. Use as: `handler def my_method(ctx, arg)`
+    def self.handler(method_name = nil, **opts)
+      return super unless method_name.is_a?(Symbol)
+
+      _register_handler(method_name, kind: nil, **opts)
+    end
+
+    def self._service_kind
+      'service'
+    end
+
+    # -- Instance-based API (legacy) --
 
     sig { returns(T.untyped) }
     attr_reader :service_tag
@@ -32,24 +56,12 @@ module Restate
       @service_tag.name
     end
 
-    # Register a handler.
-    #
-    # @param name [String] handler name
-    # @param accept [String] accept content type
-    # @param content_type [String] response content type
-    # @param input_serde [#serialize, #deserialize] input serializer
-    # @param output_serde [#serialize, #deserialize] output serializer
-    # @yield [ctx] or [ctx, input] the handler block
-    sig do
-      params(
-        name: String,
-        accept: String,
-        content_type: String,
-        input_serde: T.untyped,
-        output_serde: T.untyped,
-        block: T.proc.params(arg0: T.untyped).returns(T.untyped)
-      ).returns(T.self_type)
+    # Alias for compatibility: both class-based and instance-based use service_name
+    def service_name
+      name
     end
+
+    # Register a handler (instance-based API).
     def handler(name, accept: 'application/json', content_type: 'application/json',
                 input_serde: JsonSerde, output_serde: JsonSerde, &block)
       handler_io = HandlerIO.new(

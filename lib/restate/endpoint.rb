@@ -1,4 +1,4 @@
-# typed: true
+# typed: false
 # frozen_string_literal: true
 
 module Restate
@@ -6,7 +6,7 @@ module Restate
   class Endpoint
     extend T::Sig
 
-    sig { returns(T::Hash[String, T.any(Service, VirtualObject, Workflow)]) }
+    sig { returns(T::Hash[String, T.untyped]) }
     attr_reader :services
 
     sig { returns(T::Array[String]) }
@@ -17,18 +17,19 @@ module Restate
 
     sig { void }
     def initialize
-      @services = T.let({}, T::Hash[String, T.any(Service, VirtualObject, Workflow)])
+      @services = T.let({}, T::Hash[String, T.untyped])
       @protocol = T.let(nil, T.nilable(String))
       @identity_keys = T.let([], T::Array[String])
     end
 
     # Bind one or more services to this endpoint.
-    sig { params(svcs: T.any(Service, VirtualObject, Workflow)).returns(T.self_type) }
+    # Accepts both class-based services (e.g. Counter) and instance-based (e.g. Restate.virtual_object("Counter")).
     def bind(*svcs)
       svcs.each do |svc|
-        raise ArgumentError, "Service #{svc.name} already exists" if @services.key?(svc.name)
+        svc_name = svc.respond_to?(:service_name) ? svc.service_name : svc.name
+        raise ArgumentError, "Service #{svc_name} already exists" if @services.key?(svc_name)
 
-        @services[svc.name] = svc
+        @services[svc_name] = svc
       end
       self
     end

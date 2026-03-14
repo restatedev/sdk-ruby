@@ -1,19 +1,51 @@
-# typed: true
+# typed: false
 # frozen_string_literal: true
 
 module Restate
   # A durable workflow with a main entry point and shared handlers.
   #
-  # Example:
+  # Class-based API (preferred):
+  #   class Signup < Restate::Workflow
+  #     main def run(ctx, email)
+  #       # workflow logic
+  #     end
+  #
+  #     handler def status(ctx)
+  #       ctx.get("status")
+  #     end
+  #   end
+  #
+  # Instance-based API (legacy, still supported):
   #   signup = Restate::Workflow.new("Signup")
   #   signup.main("run") do |ctx, email|
-  #     # workflow logic
-  #   end
-  #   signup.handler("status") do |ctx|
-  #     ctx.get("status")
+  #     ...
   #   end
   class Workflow
     extend T::Sig
+    extend ServiceDSL
+
+    # -- Class-level DSL (for subclasses) --
+
+    # Register the main workflow entry point.
+    def self.main(method_name = nil, **opts)
+      return _instance_main(method_name, **opts) { |*args| yield(*args) } if block_given?
+      return method_name unless method_name.is_a?(Symbol)
+
+      _register_handler(method_name, kind: 'workflow', **opts)
+    end
+
+    # Register a shared handler.
+    def self.handler(method_name = nil, **opts)
+      return super unless method_name.is_a?(Symbol)
+
+      _register_handler(method_name, kind: 'shared', **opts)
+    end
+
+    def self._service_kind
+      'workflow'
+    end
+
+    # -- Instance-based API (legacy) --
 
     sig { returns(T.untyped) }
     attr_reader :service_tag
@@ -35,18 +67,11 @@ module Restate
       @service_tag.name
     end
 
-    # Register the main workflow entry point.
-    # Runs with "workflow" handler kind (exclusive, runs-once-per-key).
-    sig do
-      params(
-        name: String,
-        accept: String,
-        content_type: String,
-        input_serde: T.untyped,
-        output_serde: T.untyped,
-        block: T.proc.params(arg0: T.untyped).returns(T.untyped)
-      ).returns(T.self_type)
+    def service_name
+      name
     end
+
+    # Register the main workflow entry point (instance-based API).
     def main(name, accept: 'application/json', content_type: 'application/json',
              input_serde: JsonSerde, output_serde: JsonSerde, &block)
       handler_io = HandlerIO.new(
@@ -66,17 +91,7 @@ module Restate
       self
     end
 
-    # Register a shared handler (can run concurrently, read-only state).
-    sig do
-      params(
-        name: String,
-        accept: String,
-        content_type: String,
-        input_serde: T.untyped,
-        output_serde: T.untyped,
-        block: T.proc.params(arg0: T.untyped).returns(T.untyped)
-      ).returns(T.self_type)
-    end
+    # Register a shared handler (instance-based API).
     def handler(name, accept: 'application/json', content_type: 'application/json',
                 input_serde: JsonSerde, output_serde: JsonSerde, &block)
       handler_io = HandlerIO.new(

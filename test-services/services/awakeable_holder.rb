@@ -3,22 +3,22 @@
 
 require 'restate'
 
-AWAKEABLE_HOLDER = Restate.virtual_object('AwakeableHolder')
+class AwakeableHolder < Restate::VirtualObject
+  handler def hold(ctx, id) # rubocop:disable Naming/MethodParameterName
+    ctx.set('id', id)
+    nil
+  end
 
-AWAKEABLE_HOLDER.handler('hold') do |ctx, id|
-  ctx.set('id', id)
-  nil
-end
+  handler def hasAwakeable(ctx) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
+    result = ctx.get('id')
+    !result.nil?
+  end
 
-AWAKEABLE_HOLDER.handler('hasAwakeable') do |ctx|
-  result = ctx.get('id')
-  !result.nil?
-end
+  handler def unlock(ctx, payload)
+    id = ctx.get('id')
+    raise Restate::TerminalError, 'No awakeable is registered' if id.nil?
 
-AWAKEABLE_HOLDER.handler('unlock') do |ctx, payload|
-  id = ctx.get('id')
-  raise Restate::TerminalError, 'No awakeable is registered' if id.nil?
-
-  ctx.resolve_awakeable(id, payload)
-  nil
+    ctx.resolve_awakeable(id, payload)
+    nil
+  end
 end

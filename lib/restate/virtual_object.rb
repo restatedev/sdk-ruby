@@ -1,18 +1,48 @@
-# typed: true
+# typed: false
 # frozen_string_literal: true
 
 module Restate
   # A keyed virtual object with durable state.
   #
-  # Example:
+  # Class-based API (preferred):
+  #   class Counter < Restate::VirtualObject
+  #     handler def add(ctx, addend)
+  #       old = ctx.get("count") || 0
+  #       ctx.set("count", old + addend)
+  #       old + addend
+  #     end
+  #
+  #     shared def get(ctx)
+  #       ctx.get("count") || 0
+  #     end
+  #   end
+  #
+  # Instance-based API (legacy, still supported):
   #   counter = Restate::VirtualObject.new("Counter")
-  #   counter.handler("add", kind: :exclusive) do |ctx, value|
-  #     current = ctx.get("count") || 0
-  #     ctx.set("count", current + value)
-  #     current + value
+  #   counter.handler("add") do |ctx, value|
+  #     ...
   #   end
   class VirtualObject
     extend T::Sig
+    extend ServiceDSL
+
+    # -- Class-level DSL (for subclasses) --
+
+    def self.handler(method_name = nil, kind: :exclusive, **opts)
+      return super unless method_name.is_a?(Symbol)
+
+      _register_handler(method_name, kind: kind.to_s, **opts)
+    end
+
+    def self.shared(method_name, **opts)
+      _register_handler(method_name, kind: 'shared', **opts)
+    end
+
+    def self._service_kind
+      'object'
+    end
+
+    # -- Instance-based API (legacy) --
 
     sig { returns(T.untyped) }
     attr_reader :service_tag
@@ -34,23 +64,11 @@ module Restate
       @service_tag.name
     end
 
-    # Register a handler.
-    #
-    # @param name [String] handler name
-    # @param kind [:exclusive, :shared] concurrency mode (default :exclusive)
-    # @param input_serde, output_serde serializers
-    # @yield [ctx] or [ctx, input]
-    sig do
-      params(
-        name: String,
-        kind: Symbol,
-        accept: String,
-        content_type: String,
-        input_serde: T.untyped,
-        output_serde: T.untyped,
-        block: T.proc.params(arg0: T.untyped).returns(T.untyped)
-      ).returns(T.self_type)
+    def service_name
+      name
     end
+
+    # Register a handler (instance-based API).
     def handler(name, kind: :exclusive, accept: 'application/json', content_type: 'application/json',
                 input_serde: JsonSerde, output_serde: JsonSerde, &block)
       handler_io = HandlerIO.new(

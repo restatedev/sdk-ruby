@@ -3,24 +3,24 @@
 
 require 'restate'
 
-KILL_TEST_RUNNER = Restate.virtual_object('KillTestRunner')
-
-KILL_TEST_RUNNER.handler('startCallTree') do |ctx|
-  ctx.object_call('KillTestSingleton', 'recursiveCall', ctx.key, nil)
-  nil
+class KillTestRunner < Restate::VirtualObject
+  handler def startCallTree(ctx) # rubocop:disable Naming/MethodName
+    ctx.object_call('KillTestSingleton', 'recursiveCall', ctx.key, nil)
+    nil
+  end
 end
 
-KILL_TEST_SINGLETON = Restate.virtual_object('KillTestSingleton')
+class KillTestSingleton < Restate::VirtualObject # rubocop:disable Style/OneClassPerFile
+  handler def recursiveCall(ctx) # rubocop:disable Naming/MethodName
+    id, handle = ctx.create_awakeable
+    ctx.object_send('AwakeableHolder', 'hold', ctx.key, id)
+    ctx.resolve_handle(handle)
 
-KILL_TEST_SINGLETON.handler('recursiveCall') do |ctx|
-  id, handle = ctx.create_awakeable
-  ctx.object_send('AwakeableHolder', 'hold', ctx.key, id)
-  ctx.resolve_handle(handle)
+    ctx.object_call('KillTestSingleton', 'recursiveCall', ctx.key, nil)
+    nil
+  end
 
-  ctx.object_call('KillTestSingleton', 'recursiveCall', ctx.key, nil)
-  nil
-end
-
-KILL_TEST_SINGLETON.handler('isUnlocked') do |_ctx|
-  nil
+  handler def isUnlocked(_ctx) # rubocop:disable Naming/MethodName
+    nil
+  end
 end

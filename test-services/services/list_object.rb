@@ -3,20 +3,20 @@
 
 require 'restate'
 
-LIST_OBJECT = Restate.virtual_object('ListObject')
+class ListObject < Restate::VirtualObject
+  handler def append(ctx, value)
+    list = ctx.get('list') || []
+    ctx.set('list', list + [value])
+    nil
+  end
 
-LIST_OBJECT.handler('append') do |ctx, value|
-  list = ctx.get('list') || []
-  ctx.set('list', list + [value])
-  nil
-end
+  handler def get(ctx)
+    ctx.get('list') || []
+  end
 
-LIST_OBJECT.handler('get') do |ctx|
-  ctx.get('list') || []
-end
-
-LIST_OBJECT.handler('clear') do |ctx|
-  result = ctx.get('list') || []
-  ctx.clear('list')
-  result
+  handler def clear(ctx)
+    result = ctx.get('list') || []
+    ctx.clear('list')
+    result
+  end
 end

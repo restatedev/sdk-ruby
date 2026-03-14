@@ -58,8 +58,9 @@ module Restate
         build_handler(handler)
       end
 
+      svc_name = service.respond_to?(:service_name) ? service.service_name : service.name
       compact({
-                name: service.name,
+                name: svc_name,
                 ty: service_type,
                 handlers: handlers,
                 documentation: service.service_tag.description,

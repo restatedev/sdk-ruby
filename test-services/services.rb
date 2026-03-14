@@ -14,25 +14,15 @@ require_relative 'services/kill_test'
 require_relative 'services/block_and_wait_workflow'
 require_relative 'services/virtual_object_command_interpreter'
 
-ALL_SERVICES = {
-  'Counter' => COUNTER,
-  'ListObject' => LIST_OBJECT,
-  'MapObject' => MAP_OBJECT,
-  'Failing' => FAILING,
-  'NonDeterministic' => NON_DETERMINISTIC,
-  'TestUtilsService' => TEST_UTILS,
-  'Proxy' => PROXY,
-  'AwakeableHolder' => AWAKEABLE_HOLDER,
-  'CancelTestRunner' => CANCEL_TEST_RUNNER,
-  'CancelTestBlockingService' => CANCEL_TEST_BLOCKING_SERVICE,
-  'KillTestRunner' => KILL_TEST_RUNNER,
-  'KillTestSingleton' => KILL_TEST_SINGLETON,
-  'BlockAndWaitWorkflow' => BLOCK_AND_WAIT_WORKFLOW,
-  'VirtualObjectCommandInterpreter' => VIRTUAL_OBJECT_COMMAND_INTERPRETER
-}.freeze
+ALL_SERVICES = [
+  Counter, ListObject, MapObject, Failing, NonDeterministic,
+  TestUtilsService, Proxy, AwakeableHolder, CancelTestRunner,
+  CancelTestBlockingService, KillTestRunner, KillTestSingleton,
+  BlockAndWaitWorkflow, VirtualObjectCommandInterpreter
+].freeze
 
 def services_named(names)
-  names.filter_map { |name| ALL_SERVICES[name] }
+  ALL_SERVICES.select { |svc| names.include?(svc.service_name) }
 end
 
 def test_services
@@ -40,6 +30,6 @@ def test_services
   if names
     services_named(names.split(','))
   else
-    ALL_SERVICES.values
+    ALL_SERVICES
   end
 end

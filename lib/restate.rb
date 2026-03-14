@@ -8,6 +8,7 @@ require_relative 'restate/serde'
 require_relative 'restate/vm'
 require_relative 'restate/context'
 require_relative 'restate/handler'
+require_relative 'restate/service_dsl'
 require_relative 'restate/service'
 require_relative 'restate/virtual_object'
 require_relative 'restate/workflow'
@@ -39,9 +40,10 @@ module Restate
   end
 
   # Create an endpoint binding services, and return the Rack app.
+  # Accepts both class-based services (e.g. Counter) and instance-based services.
   sig do
     params(
-      services: T.any(Service, VirtualObject, Workflow),
+      services: T.untyped,
       protocol: T.nilable(String),
       identity_keys: T.nilable(T::Array[String])
     ).returns(Endpoint)

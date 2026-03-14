@@ -3,45 +3,43 @@
 
 require 'restate'
 
-TEST_UTILS = Restate.service('TestUtilsService')
-
-TEST_UTILS.handler('echo') do |_ctx, input|
-  input
-end
-
-TEST_UTILS.handler('uppercaseEcho') do |_ctx, input|
-  input.upcase
-end
-
-TEST_UTILS.handler('echoHeaders') do |ctx|
-  ctx.request.headers.to_h
-end
-
-TEST_UTILS.handler('rawEcho',
-                   accept: '*/*',
-                   content_type: 'application/octet-stream',
-                   input_serde: Restate::BytesSerde,
-                   output_serde: Restate::BytesSerde) do |_ctx, input|
-  input
-end
-
-TEST_UTILS.handler('countExecutedSideEffects') do |ctx, increments|
-  invoked_side_effects = 0
-  increments.times do
-    ctx.run('count') do
-      invoked_side_effects += 1
-    end
+class TestUtilsService < Restate::Service
+  handler def echo(_ctx, input)
+    input
   end
-  invoked_side_effects
-end
 
-TEST_UTILS.handler('cancelInvocation') do |ctx, invocation_id|
-  ctx.cancel_invocation(invocation_id)
-  nil
-end
+  handler def uppercaseEcho(_ctx, input) # rubocop:disable Naming/MethodName
+    input.upcase
+  end
 
-TEST_UTILS.handler('sleepConcurrently') do |ctx, millis_list|
-  handles = millis_list.map { |ms| ctx.create_sleep(ms / 1000.0) }
-  handles.each { |h| ctx.resolve_handle(h) }
-  nil
+  handler def echoHeaders(ctx) # rubocop:disable Naming/MethodName
+    ctx.request.headers.to_h
+  end
+
+  handler :rawEcho, accept: '*/*', content_type: 'application/octet-stream',
+                    input_serde: Restate::BytesSerde, output_serde: Restate::BytesSerde
+  def rawEcho(_ctx, input) # rubocop:disable Naming/MethodName
+    input
+  end
+
+  handler def countExecutedSideEffects(ctx, increments) # rubocop:disable Naming/MethodName
+    invoked_side_effects = 0
+    increments.times do
+      ctx.run('count') do
+        invoked_side_effects += 1
+      end
+    end
+    invoked_side_effects
+  end
+
+  handler def cancelInvocation(ctx, invocation_id) # rubocop:disable Naming/MethodName
+    ctx.cancel_invocation(invocation_id)
+    nil
+  end
+
+  handler def sleepConcurrently(ctx, millis_list) # rubocop:disable Naming/MethodName
+    handles = millis_list.map { |ms| ctx.create_sleep(ms / 1000.0) }
+    handles.each { |h| ctx.resolve_handle(h) }
+    nil
+  end
 end
