@@ -4,6 +4,8 @@ This document describes the internal architecture, execution flow, and important
 details of the Restate Ruby SDK. It is intended for contributors and AI assistants working on
 the codebase.
 
+---
+
 ## Architecture Overview
 
 ```
@@ -30,6 +32,51 @@ the codebase.
 
 The SDK is a Rack 3 application designed for Falcon. It wraps the shared Rust
 `restate-sdk-shared-core` VM — the same core used by the Python, TypeScript, and other SDKs.
+
+---
+
+## File Map
+
+```
+lib/
+├── restate.rb                       Factory methods: Restate.service/virtual_object/workflow/endpoint
+└── restate/
+    ├── context.rb                   Request = Struct.new(:id, :headers, :body)
+    ├── discovery.rb                 Generates discovery JSON manifest
+    ├── durable_future.rb            DurableFuture, DurableCallFuture, SendHandle
+    ├── endpoint.rb                  Endpoint — holds services, builds Rack app
+    ├── errors.rb                    TerminalError, SuspendedError, InternalError, DisconnectedError
+    ├── handler.rb                   Handler, HandlerIO, ServiceTag structs + invoke_handler
+    ├── serde.rb                     JsonSerde, BytesSerde, NOT_SET sentinel, schema generation
+    ├── server.rb                    Rack 3 app — routes, I/O streaming, Async tasks
+    ├── server_context.rb            ctx object — state, sleep, run, calls, progress loop
+    ├── service.rb                   Stateless Service class + handler DSL
+    ├── service_dsl.rb               Shared class-level DSL (inherited by all service types)
+    ├── virtual_object.rb            VirtualObject class + handler/shared DSL
+    ├── vm.rb                        VMWrapper — Ruby bridge to native VM
+    └── workflow.rb                  Workflow class + main/handler DSL
+
+ext/restate_internal/
+├── Cargo.toml                       Depends on restate-sdk-shared-core 0.7.0, magnus 0.7
+└── src/lib.rs                       Rust ↔ Ruby bindings (~1095 lines)
+
+test-services/                       Integration test services (for sdk-test-suite)
+├── Dockerfile                       Multi-stage: build native ext → run Falcon
+├── config.ru                        Rack entry point
+├── services.rb                      Service registry + SERVICES env filter
+├── exclusions.yaml                  Test suite exclusions (currently empty — all tests pass)
+└── services/                        12 test service files (see Test Services section)
+
+examples/                            Runnable examples showcasing SDK features
+├── config.ru                        Rackup for greeter example
+├── greeter.rb                       Overview: Service, VirtualObject, Workflow
+├── durable_execution.rb             ctx.run, RunRetryPolicy, TerminalError
+├── virtual_objects.rb               State ops, handler vs shared
+├── workflow.rb                      Promises, signals, workflow state
+└── service_communication.rb         Calls, sends, fan-out, wait_any, awakeables
+```
+
+---
 
 ## Components
 
@@ -62,6 +109,14 @@ Thin Ruby wrapper that:
 4. Catches `Internal::VMError` from `do_progress`/`take_notification` and returns it as a value
    (not raised), so `ServerContext` can handle it.
 
+**Key types defined here:**
+- `Invocation` Struct: `{invocation_id, random_seed, headers, input_buffer, key}`
+- `Failure` Struct: `{code, message, stacktrace}`
+- `RunRetryPolicy` Struct: `{initial_interval, max_attempts, max_duration, max_interval, interval_factor}`
+- Frozen sentinel singletons: `NOT_READY`, `SUSPENDED`, `DO_PROGRESS_ANY_COMPLETED`,
+  `DO_PROGRESS_READ_FROM_INPUT`, `DO_PROGRESS_CANCEL_SIGNAL_RECEIVED`, `DO_WAIT_PENDING_RUN`
+- `DoProgressExecuteRun` Struct: `{handle}` — carries the run handle to execute
+
 ### Server (`lib/restate/server.rb`)
 
 Rack 3 application with three routes:
@@ -84,29 +139,100 @@ This is the most complex part. See [Invocation Execution Flow](#invocation-execu
 
 ### ServerContext (`lib/restate/server_context.rb`)
 
-Implements:
+The `ctx` object passed to every handler. Implements:
+
 - **Progress loop** (`poll_or_cancel`) — the core execution driver.
-- **Context API** — `get`, `set`, `clear`, `clear_all`, `state_keys`, `sleep`, `run`,
-  `service_call`, `service_send`, `object_call`, `object_send`, `workflow_call`, `workflow_send`.
+- **Public context API** — `get`, `set`, `clear`, `clear_all`, `state_keys`, `sleep`, `run`,
+  `service_call`, `service_send`, `object_call`, `object_send`, `workflow_call`, `workflow_send`,
+  `generic_call`, `generic_send`, `promise`, `peek_promise`, `resolve_promise`, `reject_promise`,
+  `awakeable`, `resolve_awakeable`, `reject_awakeable`, `cancel_invocation`, `wait_any`.
+- **Low-level handle API** (used by test services) — `resolve_handle`, `wait_any_handle`,
+  `completed?`, `take_completed`.
 - **Run execution** — spawns durable side effects as Async child tasks.
 
 ### Service Types
 
+All three share a common DSL defined in `lib/restate/service_dsl.rb`:
+
 - **`Service`** (`lib/restate/service.rb`) — stateless, handlers have no `kind`.
 - **`VirtualObject`** (`lib/restate/virtual_object.rb`) — keyed + stateful, handlers default to
-  `:exclusive`.
+  `:exclusive`. Has `shared` method for concurrent-access handlers.
 - **`Workflow`** (`lib/restate/workflow.rb`) — keyed + stateful, has `.main()` (kind=workflow,
   runs once per key) and `.handler()` (kind=shared).
+
+### Service DSL (`lib/restate/service_dsl.rb`)
+
+The shared class-level DSL included by all service types:
+
+- `inherited(subclass)` — initializes `@_handler_registry`, `@_service_name`, `@_handlers`
+- `service_name(name = nil)` — getter/setter; defaults to unqualified class name
+- `service_tag` → `ServiceTag` — built from `service_name` and `_service_kind`
+- `handlers` → `Hash[String, Handler]` — lazy-built, cached
+- `_register_handler(method_name, kind:, **opts)` — stores in registry, invalidates cache
+- `_build_handlers` — reflects on instance methods, binds to `.allocate` instances, creates Handler structs
+
+**Handler binding**: The DSL uses `instance_method(name).bind_call(allocate, ...)` pattern. This
+creates a lightweight uninitialized instance for method dispatch. Handlers are stateless — any
+instance state should go through `ctx.get`/`ctx.set`.
 
 ### Handler Dispatch (`lib/restate/handler.rb`)
 
 `Restate.invoke_handler` deserializes input via `handler_io.input_serde`, calls the block with
 `(ctx)` or `(ctx, input)` based on arity, then serializes output via `handler_io.output_serde`.
 
+**Data structures:**
+- `ServiceTag` = `Struct.new(:kind, :name, :description, :metadata)`
+- `HandlerIO` = `Struct.new(:accept, :content_type, :input_serde, :output_serde, :input_schema, :output_schema)`
+- `Handler` = `Struct.new(:service_tag, :handler_io, :kind, :name, :callable, :arity)`
+
+### Durable Futures (`lib/restate/durable_future.rb`)
+
+Three classes for async result handling:
+
+**`DurableFuture`** — returned by `ctx.sleep`, `ctx.run`, promise operations.
+- `await` — first call resolves via `ctx.resolve_handle(handle)`, subsequent calls return cached value
+- `completed?` — non-blocking check via `ctx.completed?(handle)`
+- `handle` — the raw VM notification handle (Integer)
+
+**`DurableCallFuture` < `DurableFuture`** — returned by `ctx.service_call`, `ctx.object_call`, `ctx.workflow_call`.
+- Two handles: `result_handle` (for await) and `invocation_id_handle` (for ID)
+- `invocation_id` — lazily resolved on first access
+- `cancel` — calls `ctx.cancel_invocation(invocation_id)`
+
+**`SendHandle`** — returned by `ctx.service_send`, `ctx.object_send`, `ctx.workflow_send`.
+- `invocation_id` — lazily resolved
+- `cancel` — calls `ctx.cancel_invocation(invocation_id)`
+- No `await` (fire-and-forget)
+
 ### Serialization (`lib/restate/serde.rb`)
 
-- **`JsonSerde`** — default. `JSON.generate` / `JSON.parse`. Returns binary-encoded strings (`.b`).
+- **`JsonSerde`** — default. `JSON.generate` / `JSON.parse(buf, symbolize_names: false)`.
+  Serializes nil as empty string (not `"null"`).
 - **`BytesSerde`** — pass-through for raw bytes.
+- **`NOT_SET`** — frozen sentinel to distinguish "caller didn't pass serde" from `nil`.
+- **`compute_json_schema(type)`** — generates JSON schema from Ruby types for discovery.
+
+### Error Types (`lib/restate/errors.rb`)
+
+| Class | Purpose | User-facing? |
+|-------|---------|-------------|
+| `TerminalError` | Non-retryable failure (has `status_code`, default 500) | Yes |
+| `SuspendedError` | VM suspended, handler must stop | No (control flow) |
+| `InternalError` | VM error, triggers retry | No (control flow) |
+| `DisconnectedError` | HTTP connection lost | No (control flow) |
+
+`SuspendedError` and `InternalError` are dangerous because bare `rescue => e` in user handlers
+will catch them. `ServerContext#enter` walks the exception cause chain to detect this.
+
+### Discovery (`lib/restate/discovery.rb`)
+
+Generates the JSON manifest returned at `GET /discover`. Maps internal types to protocol types:
+- Service kinds: `service`→`SERVICE`, `object`→`VIRTUAL_OBJECT`, `workflow`→`WORKFLOW`
+- Handler kinds: `exclusive`→`EXCLUSIVE`, `shared`→`SHARED`, `workflow`→`WORKFLOW`
+- Protocol mode: `bidi`→`BIDI_STREAM`, `request_response`→`REQUEST_RESPONSE`
+- Protocol versions: min=5, max=5
+
+---
 
 ## Invocation Execution Flow
 
@@ -221,12 +347,153 @@ vm.take_output → output_queue.enqueue(chunk) ··· output_queue.dequeue → y
 └──────────────────────────┘  └──────────────────────────┘
 ```
 
+---
+
+## VM State Machine
+
+The VM is a synchronous state machine. It does not do I/O itself. The SDK drives it:
+
+1. Feed input bytes → `notify_input(bytes)` / `notify_input_closed()`
+2. Check readiness → `is_ready_to_execute()`
+3. Get invocation → `sys_input()`
+4. Issue syscalls → `sys_get_state`, `sys_run`, `sys_call`, etc. (returns handles)
+5. Drive progress → `do_progress(handles)` (tells you what to do next)
+6. Collect results → `take_notification(handle)` (gets completed values)
+7. Drain output → `take_output()` (gets bytes to send back over HTTP/2)
+8. Finish → `sys_write_output_success/failure` then `sys_end`
+
+The VM is wrapped in `RefCell<CoreVM>` — it is not thread-safe. All access must happen within
+the same fiber chain (which is guaranteed by Async's cooperative scheduling).
+
+### VM Syscalls Reference
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `sys_input` | `Invocation` | Get invocation metadata (id, headers, input, key) |
+| `sys_get_state(name)` | handle | Read state key |
+| `sys_set_state(name, value)` | — | Write state key (immediate, no handle) |
+| `sys_clear_state(name)` | — | Delete state key |
+| `sys_clear_all_state` | — | Delete all state keys |
+| `sys_get_state_keys` | handle | List all state key names |
+| `sys_sleep(millis, name?)` | handle | Create sleep timer |
+| `sys_call(service, handler, param, key?, idempotency_key?, headers?)` | `CallHandle` | RPC call (two handles: result + invocation_id) |
+| `sys_send(service, handler, param, key?, delay?, idempotency_key?, headers?)` | handle | Fire-and-forget send (invocation_id handle only) |
+| `sys_run(name)` | handle | Register durable side effect |
+| `propose_run_completion_success(handle, output)` | — | Mark run as succeeded |
+| `propose_run_completion_failure(handle, failure)` | — | Mark run as terminally failed |
+| `propose_run_completion_transient(handle, failure, duration_ms, config)` | — | Mark run as transiently failed (retryable) |
+| `sys_awakeable` | `[id, handle]` | Create awakeable callback |
+| `sys_complete_awakeable_success(id, value)` | — | Resolve awakeable |
+| `sys_complete_awakeable_failure(id, failure)` | — | Reject awakeable |
+| `sys_get_promise(name)` | handle | Get promise value (blocks until resolved) |
+| `sys_peek_promise(name)` | handle | Peek promise (non-blocking) |
+| `sys_complete_promise_success(name, value)` | handle | Resolve promise |
+| `sys_complete_promise_failure(name, failure)` | handle | Reject promise |
+| `sys_cancel_invocation(id)` | — | Cancel invocation |
+| `sys_write_output_success(output)` | — | Write final handler result |
+| `sys_write_output_failure(failure)` | — | Write final handler error |
+| `sys_end` | — | Finalize invocation |
+| `is_replaying` | bool | Check if replaying from journal |
+
+---
+
+## Typed Call Resolution
+
+When a handler calls `ctx.service_call(Worker, :process, arg)`, the `resolve_call_target` method:
+
+1. Checks if `service` is a Class with `respond_to?(:service_name)`
+2. If yes: extracts `service.service_name`, looks up `service.handlers[handler_name]` for metadata
+3. If no (string): uses `service.to_s` and `handler.to_s`, metadata is nil
+
+The `resolve_serde` method then picks serializers in order:
+1. Explicit serde passed by caller (if not `NOT_SET` sentinel)
+2. Handler metadata's `input_serde`/`output_serde` (if metadata available)
+3. `JsonSerde` as final fallback
+
+This means: when you pass class references, the SDK auto-resolves serdes from the target handler's
+registration options. When you pass strings, it always uses `JsonSerde`.
+
+---
+
+## Run Execution (Durable Side Effects)
+
+When user code calls `ctx.run('name') { ... }`:
+
+1. `sys_run(name)` registers the run with the VM, returns a handle
+2. The action block is stored in `@run_coros_to_execute[handle]`
+3. A `DurableFuture` wrapping the handle is returned immediately
+4. When the future is awaited, the progress loop eventually receives `DoProgressExecuteRun(handle)`
+5. The progress loop spawns an Async task that:
+   - Executes the stored action block
+   - On success: calls `propose_run_completion_success(handle, serialized_result)`
+   - On `TerminalError`: calls `propose_run_completion_failure(handle, failure)`
+   - On other errors: calls `propose_run_completion_transient(handle, failure, duration, config)`
+   - Enqueues `:run_completed` to `input_queue` to wake the progress loop
+6. The progress loop continues and eventually `AnyCompleted` is returned for the handle
+
+**During replay**, the VM already has the result from the journal. `do_progress` returns
+`AnyCompleted` directly — the action block is never executed.
+
+---
+
+## Test Services (`test-services/`)
+
+The `test-services/` directory contains integration test services designed to run against the
+[sdk-test-suite](https://github.com/restatedev/sdk-test-suite) (JVM-based e2e verification runner).
+
+### All Services
+
+| Service | Type | Key Handlers |
+|---------|------|-------------|
+| Counter | VirtualObject | reset, get, add, addThenFail |
+| ListObject | VirtualObject | append, get, clear |
+| MapObject | VirtualObject | set, get, clearAll |
+| Failing | VirtualObject | terminallyFailingCall, sideEffectSucceedsAfterGivenAttempts, ... |
+| NonDeterministic | VirtualObject | setDifferentKey, callDifferentMethod, ... |
+| TestUtilsService | Service | echo, uppercaseEcho, echoHeaders, rawEcho, countExecutedSideEffects, sleepConcurrently, cancelInvocation |
+| Proxy | Service | call, oneWayCall, manyCalls |
+| AwakeableHolder | VirtualObject | hold, hasAwakeable, unlock |
+| CancelTestRunner | Service | startTest, verifyTest |
+| CancelTestBlockingService | Service | block, isUnlocked |
+| KillTestRunner | Service | startCallTree |
+| KillTestSingleton | VirtualObject | recursiveCall, isUnlocked |
+| BlockAndWaitWorkflow | Workflow | run (main), unblock, getState |
+| VirtualObjectCommandInterpreter | VirtualObject | interpretCommands, getResults, hasAwakeable, resolveAwakeable, rejectAwakeable |
+
+### Test Suite Exclusions
+
+Currently `exclusions.yaml` has no exclusions — all test suites pass with no skipped tests.
+
+### Running Integration Tests
+
+```bash
+# Full run (builds Docker image, downloads test JAR, runs all suites)
+./etc/run-integration-tests.sh
+
+# Skip Docker build (reuse existing image)
+./etc/run-integration-tests.sh --skip-build
+```
+
+Requires Docker and Java 21+. The test JAR is cached in `tmp/`.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `SERVICES` | Comma-separated list of service names to register (default: all) |
+| `E2E_REQUEST_SIGNING_ENV` | Identity signing key for request verification |
+| `PORT` | Listen port (default: 9080) |
+| `RESTATE_CORE_LOG` | Rust core log level (default: debug) |
+| `RESTATE_LOGGING` | Alias for `RESTATE_CORE_LOG` (used by e2e runner) |
+
+---
+
 ## Manual Testing
 
 ### Prerequisites
 
 1. **Restate runtime** must be running (default ingress on `:8080`, admin API on `:9070`).
-2. **Native extension** must be compiled: `make compile` (or `bundle exec rake compile`).
+2. **Native extension** must be compiled: `bundle exec rake compile`.
 
 ### Start the Example Server
 
@@ -239,16 +506,13 @@ Use `-n 1` for a single worker (easier debugging).
 
 ### Register the Deployment
 
-The `restate` CLI may not be on PATH in all environments. Use the admin API directly:
-
 ```bash
 curl http://localhost:9070/deployments \
   -H 'content-type: application/json' \
   -d '{"uri": "http://localhost:9080"}'
 ```
 
-To force re-registration after code changes (restarts the Falcon server first):
-
+To force re-registration after code changes:
 ```bash
 curl http://localhost:9070/deployments \
   -H 'content-type: application/json' \
@@ -257,52 +521,16 @@ curl http://localhost:9070/deployments \
 
 ### Invoke Handlers
 
-**Greeter (stateless service):**
 ```bash
-# Simple greeting — exercises ctx.run
-curl localhost:8080/Greeter/greet \
-  -H 'content-type: application/json' -d '"World"'
-# → "Hello, World!"
+# Greeter (stateless service)
+curl localhost:8080/Greeter/greet -H 'content-type: application/json' -d '"World"'
 
-# Greeting with cross-service call — exercises ctx.object_call, ctx.get, ctx.set
-curl localhost:8080/Greeter/greetAndRemember \
-  -H 'content-type: application/json' -d '"Alice"'
-# → "Hello, Alice! (greeted 1 times)"
-```
+# Counter (virtual object — key in URL)
+curl localhost:8080/Counter/my-counter/add -H 'content-type: application/json' -d '3'
+curl localhost:8080/Counter/my-counter/get -H 'content-type: application/json' -d 'null'
 
-**Counter (virtual object — requires key in URL):**
-```bash
-curl localhost:8080/Counter/my-counter/add \
-  -H 'content-type: application/json' -d '3'
-# → {"oldValue":0,"newValue":3}
-
-curl localhost:8080/Counter/my-counter/get \
-  -H 'content-type: application/json' -d 'null'
-# → 3
-
-curl localhost:8080/Counter/my-counter/reset \
-  -H 'content-type: application/json' -d 'null'
-# → null
-```
-
-**Signup (workflow — requires key in URL):**
-```bash
-curl localhost:8080/Signup/user1/run \
-  -H 'content-type: application/json' -d '"user@example.com"' \
-  -H 'idempotency-key: signup-1'
-# → {"userId":"user_user_example_com","email":"user@example.com"}
-
-curl localhost:8080/Signup/user1/status \
-  -H 'content-type: application/json' -d 'null'
-# → "completed"
-```
-
-### Health Check
-
-```bash
-# Direct to Falcon (HTTP/2, needs special curl flag or go through Restate)
-curl --http2-prior-knowledge http://localhost:9080/health
-# → {"status":"ok"}
+# Signup (workflow — key in URL)
+curl localhost:8080/Signup/user1/run -H 'content-type: application/json' -d '"user@example.com"'
 ```
 
 ### Troubleshooting
@@ -315,83 +543,7 @@ curl --http2-prior-knowledge http://localhost:9080/health
 - **Restate can't reach Falcon**: If Restate runs in Docker, bind Falcon to `0.0.0.0` not
   `localhost`, and use the host machine's IP in the registration URI.
 
-## Test Services (`test-services/`)
-
-The `test-services/` directory contains integration test services ported from the Python SDK's
-`test-services/`. These are designed to run against the
-[sdk-test-suite](https://github.com/restatedev/sdk-test-suite) (JVM-based e2e verification runner).
-
-### Structure
-
-```
-test-services/
-├── Dockerfile             # Multi-stage build (compile native ext → run Falcon)
-├── Gemfile                # Points to SDK via path: ".."
-├── config.ru              # Rack entry point
-├── services.rb            # Service registry (supports SERVICES env var filtering)
-├── entrypoint.sh          # Docker entrypoint (runs Falcon)
-├── exclusions.yaml        # Excluded services/handlers for test suite
-├── .env                   # Default env vars
-└── services/
-    ├── counter.rb         # Counter VirtualObject (reset, get, add, addThenFail)
-    ├── list_object.rb     # ListObject VirtualObject (append, get, clear)
-    ├── map_object.rb      # MapObject VirtualObject (set, get, clearAll)
-    ├── failing.rb         # Failing VirtualObject (terminal errors, retry policies)
-    ├── non_determinism.rb # NonDeterministic VirtualObject (deliberate non-determinism)
-    └── test_utils.rb      # TestUtilsService (echo, headers, rawEcho, side effects)
-```
-
-### Ported Services
-
-| Service | Type | Handlers |
-|---------|------|----------|
-| Counter | VirtualObject | reset, get, add, addThenFail |
-| ListObject | VirtualObject | append, get, clear |
-| MapObject | VirtualObject | set, get, clearAll |
-| Failing | VirtualObject | terminallyFailingCall, callTerminallyFailingCall, failingCallWithEventualSuccess, terminallyFailingSideEffect, sideEffectSucceedsAfterGivenAttempts, sideEffectFailsAfterGivenAttempts |
-| NonDeterministic | VirtualObject | setDifferentKey, backgroundInvokeWithDifferentTargets, callDifferentMethod, eitherSleepOrCall |
-| TestUtilsService | Service | echo, uppercaseEcho, echoHeaders, rawEcho, countExecutedSideEffects |
-
-### Not Yet Ported (missing SDK features)
-
-| Service | Blocked On |
-|---------|------------|
-| AwakeableHolder | `ctx.awakeable`, `ctx.resolve_awakeable` |
-| BlockAndWaitWorkflow | `ctx.promise` |
-| CancelTestRunner/BlockingService | `ctx.awakeable`, cancellation |
-| KillTestRunner/Singleton | `ctx.awakeable` |
-| Proxy | `ctx.generic_call`, `ctx.generic_send` |
-| Interpreter (L0/L1/L2), Helper | Awakeables, promises, combinators |
-| VirtualObjectCommandInterpreter | Awakeables, promises, combinators |
-| TestUtilsService.sleepConcurrently | Concurrent sleep handles |
-| TestUtilsService.cancelInvocation | `ctx.cancel_invocation` |
-
-### Running Locally
-
-```bash
-cd test-services
-bundle install
-bundle exec falcon serve --bind http://localhost:9080
-```
-
-### Running with Docker
-
-The Dockerfile must be built from the **repo root** (it copies the SDK source):
-
-```bash
-docker build -f test-services/Dockerfile -t restate-ruby-test-services .
-docker run -p 9080:9080 restate-ruby-test-services
-```
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `SERVICES` | Comma-separated list of service names to register (default: all) |
-| `E2E_REQUEST_SIGNING_ENV` | Identity signing key for request verification |
-| `PORT` | Listen port (default: 9080) |
-| `RESTATE_CORE_LOG` | Rust core log level (default: debug) |
-| `RESTATE_LOGGING` | Alias for `RESTATE_CORE_LOG` (used by e2e runner) |
+---
 
 ## Important Learnings
 
@@ -414,8 +566,6 @@ The Rust VM's `take_output` returns `TakeOutputResult::Buffer(bytes)` where byte
 so naive checks like `break unless output` create infinite loops.
 
 **Always use**: `break if output.nil? || output.empty?`
-
-This differs from Python where `if output:` is false for both `None` and `b""`.
 
 This applies in two places:
 - `ServerContext#flush_output` (progress loop output drain)
@@ -450,7 +600,13 @@ passing them to `notify_input`, `sys_set_state`, `sys_write_output_success`, etc
 use bare `rescue => e` will accidentally catch these. The `ServerContext#enter` method walks the
 exception cause chain to detect wrapped internal exceptions.
 
-### 7. Falcon Process Management
+### 7. `Internal::Failure.new` Requires 3 Arguments
+
+`Internal::Failure.new(code, message, stacktrace)` — the stacktrace is required (pass `nil`
+if not available). Missing it causes `ArgumentError` which gets treated as a transient error,
+making terminal errors retry forever.
+
+### 8. Falcon Process Management
 
 Falcon forks worker processes. When a worker dies (e.g., health check timeout after 30s), the
 parent process survives and holds the port. To fully restart:
@@ -460,18 +616,8 @@ lsof -ti :9080 | xargs kill -9
 
 Use `-n 1` flag for single worker during development.
 
-## VM State Machine
+### 9. Sorbet Eager Sig Evaluation
 
-The VM is a synchronous state machine. It does not do I/O itself. The SDK drives it:
-
-1. Feed input bytes → `notify_input(bytes)` / `notify_input_closed()`
-2. Check readiness → `is_ready_to_execute()`
-3. Get invocation → `sys_input()`
-4. Issue syscalls → `sys_get_state`, `sys_run`, `sys_call`, etc. (returns handles)
-5. Drive progress → `do_progress(handles)` (tells you what to do next)
-6. Collect results → `take_notification(handle)` (gets completed values)
-7. Drain output → `take_output()` (gets bytes to send back over HTTP/2)
-8. Finish → `sys_write_output_success/failure` then `sys_end`
-
-The VM is wrapped in `RefCell<CoreVM>` — it is not thread-safe. All access must happen within
-the same fiber chain (which is guaranteed by Async's cooperative scheduling).
+Sorbet sigs are evaluated eagerly at class load time. If a sig references a class that hasn't
+been `require`d yet, you get `NameError` at runtime (even though `srb tc` passes). Fix: use
+`T.untyped` for return types of methods that lazy-load their dependencies.
