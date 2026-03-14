@@ -25,9 +25,9 @@ class TestUtilsService < Restate::Service
   handler def countExecutedSideEffects(ctx, increments) # rubocop:disable Naming/MethodName
     invoked_side_effects = 0
     increments.times do
-      ctx.run('count') do
+      (ctx.run('count') do
         invoked_side_effects += 1
-      end
+      end).await
     end
     invoked_side_effects
   end

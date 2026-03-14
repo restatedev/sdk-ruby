@@ -165,16 +165,14 @@ module Restate
         serde: T.untyped,
         retry_policy: T.nilable(RunRetryPolicy),
         action: T.proc.returns(T.untyped)
-      ).returns(T.untyped)
+      ).returns(DurableFuture)
     end
     def run(name, serde: JsonSerde, retry_policy: nil, &action)
       handle = @vm.sys_run(name)
 
       @run_coros_to_execute[handle] = -> { execute_run(handle, action, serde, retry_policy) }
 
-      poll_and_take(handle) do |raw|
-        raw.nil? ? nil : serde.deserialize(raw)
-      end
+      DurableFuture.new(self, handle, serde: serde)
     end
 
     # ── Service calls ──

@@ -24,9 +24,9 @@ class Failing < Restate::VirtualObject
   end
 
   handler def terminallyFailingSideEffect(ctx, error_message) # rubocop:disable Naming/MethodName
-    ctx.run('sideEffect') do
+    (ctx.run('sideEffect') do
       raise Restate::TerminalError, error_message
-    end
+    end).await
     raise 'Should not reach here'
   end
 
@@ -38,14 +38,14 @@ class Failing < Restate::VirtualObject
       initial_interval: 1,
       interval_factor: 1.0
     )
-    ctx.run('sideEffect', retry_policy: retry_policy) do
+    (ctx.run('sideEffect', retry_policy: retry_policy) do
       $eventual_success_side_effects += 1 # rubocop:disable Style/GlobalVars
       unless $eventual_success_side_effects >= minimum_attempts # rubocop:disable Style/GlobalVars
         raise "Failed at attempt: #{$eventual_success_side_effects}" # rubocop:disable Style/GlobalVars
       end
 
       $eventual_success_side_effects # rubocop:disable Style/GlobalVars
-    end
+    end).await
   end
 
   $eventual_failure_side_effects = 0 # rubocop:disable Style/GlobalVars
@@ -57,10 +57,10 @@ class Failing < Restate::VirtualObject
       interval_factor: 1.0
     )
     begin
-      ctx.run('sideEffect', retry_policy: retry_policy) do
+      (ctx.run('sideEffect', retry_policy: retry_policy) do
         $eventual_failure_side_effects += 1 # rubocop:disable Style/GlobalVars
         raise "Failed at attempt: #{$eventual_failure_side_effects}" # rubocop:disable Style/GlobalVars
-      end
+      end).await
       raise 'Side effect did not fail.'
     rescue Restate::TerminalError
       $eventual_failure_side_effects # rubocop:disable Style/GlobalVars

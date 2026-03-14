@@ -91,7 +91,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
 
       when 'getEnvVariable'
         env_name = cmd['envName']
-        result = ctx.run('get_env') { ENV.fetch(env_name, '') }
+        result = ctx.run('get_env') { ENV.fetch(env_name, '') }.await
 
       when 'awaitOne'
         type, handle = create_handle_for_command(ctx, cmd['command'])

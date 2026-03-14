@@ -14,11 +14,11 @@ class Proxy < Restate::Service
 
   handler def oneWayCall(ctx, req) # rubocop:disable Naming/MethodName
     delay_seconds = req['delayMillis'] ? req['delayMillis'] / 1000.0 : nil
-    ctx.generic_send(
+    handle = ctx.generic_send(
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
       key: req['virtualObjectKey'], delay: delay_seconds, idempotency_key: req['idempotencyKey']
     )
-    nil
+    handle.invocation_id
   end
 
   handler def manyCalls(ctx, requests) # rubocop:disable Naming/MethodName,Metrics/AbcSize,Metrics/MethodLength
