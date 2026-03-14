@@ -13,6 +13,7 @@ require_relative 'restate/service'
 require_relative 'restate/virtual_object'
 require_relative 'restate/workflow'
 require_relative 'restate/server_context'
+require_relative 'restate/durable_future'
 require_relative 'restate/discovery'
 require_relative 'restate/endpoint'
 

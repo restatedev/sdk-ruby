@@ -108,19 +108,11 @@ module Restate
 
     # ── Sleep ──
 
-    sig { params(seconds: Numeric).returns(NilClass) }
+    sig { params(seconds: Numeric).returns(DurableFuture) }
     def sleep(seconds)
       millis = (seconds * 1000).to_i
       handle = @vm.sys_sleep(millis)
-      poll_and_take(handle)
-      nil
-    end
-
-    # Create a sleep timer without blocking. Returns a handle (Integer).
-    sig { params(seconds: Numeric).returns(Integer) }
-    def create_sleep(seconds)
-      millis = (seconds * 1000).to_i
-      @vm.sys_sleep(millis)
+      DurableFuture.new(self, handle)
     end
 
     # Block until a previously created handle completes. Returns the value.
@@ -146,6 +138,23 @@ module Restate
     sig { params(handle: Integer).returns(T.untyped) }
     def take_completed(handle)
       must_take_notification(handle)
+    end
+
+    # Wait until any of the given futures completes. Returns [completed, remaining].
+    sig { params(futures: DurableFuture).returns([T::Array[DurableFuture], T::Array[DurableFuture]]) }
+    def wait_any(*futures)
+      handles = futures.map(&:handle)
+      wait_any_handle(handles)
+      completed = []
+      remaining = []
+      futures.each do |f|
+        if f.completed?
+          completed << f
+        else
+          remaining << f
+        end
+      end
+      [completed, remaining]
     end
 
     # ── Durable run (side effect) ──
@@ -180,7 +189,7 @@ module Restate
         headers: T.nilable(T::Hash[String, String]),
         input_serde: T.untyped,
         output_serde: T.untyped
-      ).returns(T.untyped)
+      ).returns(DurableCallFuture)
     end
     def service_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
                      input_serde: NOT_SET, output_serde: NOT_SET)
@@ -192,9 +201,8 @@ module Restate
         service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
-      poll_and_take(call_handle.result_handle) do |raw|
-        raw.nil? ? nil : out_serde.deserialize(raw)
-      end
+      DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
+                            output_serde: out_serde)
     end
 
     sig do
@@ -207,7 +215,7 @@ module Restate
         idempotency_key: T.nilable(String),
         headers: T.nilable(T::Hash[String, String]),
         input_serde: T.untyped
-      ).void
+      ).returns(SendHandle)
     end
     def service_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
                      input_serde: NOT_SET)
@@ -215,10 +223,11 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      @vm.sys_send(
+      invocation_id_handle = @vm.sys_send(
         service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
+      SendHandle.new(self, invocation_id_handle)
     end
 
     sig do
@@ -231,7 +240,7 @@ module Restate
         headers: T.nilable(T::Hash[String, String]),
         input_serde: T.untyped,
         output_serde: T.untyped
-      ).returns(T.untyped)
+      ).returns(DurableCallFuture)
     end
     def object_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
                     input_serde: NOT_SET, output_serde: NOT_SET)
@@ -243,9 +252,8 @@ module Restate
         service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
-      poll_and_take(call_handle.result_handle) do |raw|
-        raw.nil? ? nil : out_serde.deserialize(raw)
-      end
+      DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
+                            output_serde: out_serde)
     end
 
     sig do
@@ -258,7 +266,7 @@ module Restate
         idempotency_key: T.nilable(String),
         headers: T.nilable(T::Hash[String, String]),
         input_serde: T.untyped
-      ).void
+      ).returns(SendHandle)
     end
     def object_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
                     input_serde: NOT_SET)
@@ -266,10 +274,11 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      @vm.sys_send(
+      invocation_id_handle = @vm.sys_send(
         service: svc_name, handler: handler_name, parameter: parameter.b,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
+      SendHandle.new(self, invocation_id_handle)
     end
 
     sig do
@@ -282,7 +291,7 @@ module Restate
         headers: T.nilable(T::Hash[String, String]),
         input_serde: T.untyped,
         output_serde: T.untyped
-      ).returns(T.untyped)
+      ).returns(DurableCallFuture)
     end
     def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
                       input_serde: NOT_SET, output_serde: NOT_SET)
@@ -300,7 +309,7 @@ module Restate
         idempotency_key: T.nilable(String),
         headers: T.nilable(T::Hash[String, String]),
         input_serde: T.untyped
-      ).void
+      ).returns(SendHandle)
     end
     def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
                       input_serde: NOT_SET)
@@ -310,21 +319,11 @@ module Restate
 
     # ── Awakeables ──
 
-    # Creates an awakeable without blocking. Returns [awakeable_id, handle].
-    sig { returns([String, Integer]) }
-    def create_awakeable
-      @vm.sys_awakeable
-    end
-
-    # Creates an awakeable and blocks until it is resolved.
-    # Returns [awakeable_id, value].
-    sig { params(serde: T.untyped).returns(T::Array[T.untyped]) }
+    # Creates an awakeable and returns [awakeable_id, DurableFuture].
+    sig { params(serde: T.untyped).returns([String, DurableFuture]) }
     def awakeable(serde: JsonSerde)
       id, handle = @vm.sys_awakeable
-      value = poll_and_take(handle) do |raw|
-        raw.nil? ? nil : serde.deserialize(raw)
-      end
-      [id, value]
+      [id, DurableFuture.new(self, handle, serde: serde)]
     end
 
     # Resolves an awakeable with a success value.
@@ -394,32 +393,15 @@ module Restate
         key: T.nilable(String),
         idempotency_key: T.nilable(String),
         headers: T.nilable(T::Hash[String, String])
-      ).returns(T.untyped)
+      ).returns(DurableCallFuture)
     end
     def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
       call_handle = @vm.sys_call(
         service: service, handler: handler, parameter: arg.b,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
-      poll_and_take(call_handle.result_handle)
-    end
-
-    sig do
-      params(
-        service: String,
-        handler: String,
-        arg: String,
-        key: T.nilable(String),
-        idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
-      ).returns(Integer)
-    end
-    def generic_call_handle(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
-      call_handle = @vm.sys_call(
-        service: service, handler: handler, parameter: arg.b,
-        key: key, idempotency_key: idempotency_key, headers: headers
-      )
-      call_handle.result_handle
+      DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
+                            output_serde: nil)
     end
 
     sig do
@@ -431,7 +413,7 @@ module Restate
         delay: T.nilable(Numeric),
         idempotency_key: T.nilable(String),
         headers: T.nilable(T::Hash[String, String])
-      ).returns(T.untyped)
+      ).returns(SendHandle)
     end
     def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
       delay_ms = delay ? (delay * 1000).to_i : nil
@@ -439,7 +421,7 @@ module Restate
         service: service, handler: handler, parameter: arg.b,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
-      poll_and_take(invocation_id_handle)
+      SendHandle.new(self, invocation_id_handle)
     end
 
     # ── Request metadata ──

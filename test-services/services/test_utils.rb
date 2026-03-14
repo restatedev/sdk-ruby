@@ -38,8 +38,8 @@ class TestUtilsService < Restate::Service
   end
 
   handler def sleepConcurrently(ctx, millis_list) # rubocop:disable Naming/MethodName
-    handles = millis_list.map { |ms| ctx.create_sleep(ms / 1000.0) }
-    handles.each { |h| ctx.resolve_handle(h) }
+    futures = millis_list.map { |ms| ctx.sleep(ms / 1000.0) }
+    futures.each(&:await)
     nil
   end
 end

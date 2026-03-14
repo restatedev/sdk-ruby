@@ -13,12 +13,12 @@ end
 def create_handle_for_command(ctx, cmd) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize
   case cmd['type']
   when 'createAwakeable'
-    awk_id, handle = ctx.create_awakeable
+    awk_id, future = ctx.awakeable
     ctx.set("awk-#{cmd['awakeableKey']}", awk_id)
-    [:awakeable, handle]
+    [:awakeable, future.handle]
   when 'sleep'
-    handle = ctx.create_sleep(cmd['timeoutMillis'] / 1000.0)
-    [:sleep, handle]
+    future = ctx.sleep(cmd['timeoutMillis'] / 1000.0)
+    [:sleep, future.handle]
   when 'runThrowTerminalException'
     reason = cmd['reason']
     handle = ctx.vm.sys_run('run should fail command')
@@ -62,16 +62,16 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
     req['commands'].each do |cmd| # rubocop:disable Metrics/BlockLength
       case cmd['type']
       when 'awaitAwakeableOrTimeout'
-        awk_id, awk_handle = ctx.create_awakeable
+        awk_id, awk_future = ctx.awakeable
         ctx.set("awk-#{cmd['awakeableKey']}", awk_id)
-        sleep_handle = ctx.create_sleep(cmd['timeoutMillis'] / 1000.0)
+        sleep_future = ctx.sleep(cmd['timeoutMillis'] / 1000.0)
 
-        ctx.wait_any_handle([awk_handle, sleep_handle])
+        ctx.wait_any_handle([awk_future.handle, sleep_future.handle])
 
-        if ctx.completed?(awk_handle)
-          result = JSON.parse(ctx.take_completed(awk_handle))
+        if ctx.completed?(awk_future.handle)
+          result = JSON.parse(ctx.take_completed(awk_future.handle))
         else
-          ctx.take_completed(sleep_handle)
+          ctx.take_completed(sleep_future.handle)
           raise Restate::TerminalError, 'await-timeout'
         end
 

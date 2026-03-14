@@ -33,7 +33,7 @@ class Greeter < Restate::Service
 
   handler def greetAndRemember(ctx, name) # rubocop:disable Naming/MethodName
     # Typed call: pass class + symbol instead of strings
-    count = ctx.object_call(Counter, :add, name, 1)
+    count = ctx.object_call(Counter, :add, name, 1).await
 
     "Hello, #{name}! (greeted #{count['newValue']} times)"
   end

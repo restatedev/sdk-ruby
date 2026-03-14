@@ -22,7 +22,7 @@ class NonDeterministic < Restate::VirtualObject
     else
       ctx.set('b', 'my-state')
     end
-    ctx.sleep(0.1)
+    ctx.sleep(0.1).await
     increment_counter(ctx)
     nil
   end
@@ -33,29 +33,29 @@ class NonDeterministic < Restate::VirtualObject
     else
       ctx.object_send('Counter', 'reset', 'abc', nil)
     end
-    ctx.sleep(0.1)
+    ctx.sleep(0.1).await
     increment_counter(ctx)
     nil
   end
 
   handler def callDifferentMethod(ctx) # rubocop:disable Naming/MethodName
     if do_left_action(ctx)
-      ctx.object_call('Counter', 'get', 'abc', nil)
+      ctx.object_call('Counter', 'get', 'abc', nil).await
     else
-      ctx.object_call('Counter', 'reset', 'abc', nil)
+      ctx.object_call('Counter', 'reset', 'abc', nil).await
     end
-    ctx.sleep(0.1)
+    ctx.sleep(0.1).await
     increment_counter(ctx)
     nil
   end
 
   handler def eitherSleepOrCall(ctx) # rubocop:disable Naming/MethodName
     if do_left_action(ctx)
-      ctx.sleep(0.1)
+      ctx.sleep(0.1).await
     else
-      ctx.object_call('Counter', 'get', 'abc', nil)
+      ctx.object_call('Counter', 'get', 'abc', nil).await
     end
-    ctx.sleep(0.1)
+    ctx.sleep(0.1).await
     increment_counter(ctx)
     nil
   end

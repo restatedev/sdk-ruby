@@ -8,7 +8,7 @@ class Proxy < Restate::Service
     result = ctx.generic_call(
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
       key: req['virtualObjectKey'], idempotency_key: req['idempotencyKey']
-    )
+    ).await
     result.bytes
   end
 
@@ -18,6 +18,7 @@ class Proxy < Restate::Service
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
       key: req['virtualObjectKey'], delay: delay_seconds, idempotency_key: req['idempotencyKey']
     )
+    nil
   end
 
   handler def manyCalls(ctx, requests) # rubocop:disable Naming/MethodName,Metrics/AbcSize,Metrics/MethodLength
@@ -28,14 +29,14 @@ class Proxy < Restate::Service
         ctx.generic_send(pr['serviceName'], pr['handlerName'], pr['message'].pack('C*'),
                          key: pr['virtualObjectKey'], idempotency_key: pr['idempotencyKey'])
       else
-        handle = ctx.generic_call_handle(pr['serviceName'], pr['handlerName'],
-                                         pr['message'].pack('C*'),
-                                         key: pr['virtualObjectKey'],
-                                         idempotency_key: pr['idempotencyKey'])
-        to_await << handle if req['awaitAtTheEnd']
+        future = ctx.generic_call(pr['serviceName'], pr['handlerName'],
+                                  pr['message'].pack('C*'),
+                                  key: pr['virtualObjectKey'],
+                                  idempotency_key: pr['idempotencyKey'])
+        to_await << future if req['awaitAtTheEnd']
       end
     end
-    to_await.each { |h| ctx.resolve_handle(h) }
+    to_await.each(&:await)
     nil
   end
 end
