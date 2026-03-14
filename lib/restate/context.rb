@@ -3,6 +3,62 @@
 
 # rubocop:disable Metrics/ModuleLength,Metrics/ParameterLists,Style/EmptyMethod
 module Restate
+  # Signals when the current invocation attempt has finished — either the handler
+  # completed, the connection was lost, or a transient error occurred.
+  #
+  # Use this to clean up attempt-scoped resources (open connections, temp files,
+  # etc.) that should not outlive the current attempt.
+  #
+  # Available via +ctx.request.attempt_finished_event+.
+  #
+  # @example Cancel a long-running HTTP call when the attempt finishes
+  #   event = ctx.request.attempt_finished_event
+  #   ctx.run('call-api') do
+  #     # poll event.set? periodically, or pass it to your HTTP client
+  #   end
+  class AttemptFinishedEvent
+    extend T::Sig
+
+    sig { void }
+    def initialize
+      @mutex = T.let(Mutex.new, Mutex)
+      @set = T.let(false, T::Boolean)
+      @waiters = T.let([], T::Array[Thread::Queue])
+    end
+
+    # Returns true if the attempt has finished.
+    sig { returns(T::Boolean) }
+    def set?
+      @set
+    end
+
+    # Blocks the current fiber/thread until the attempt finishes.
+    sig { void }
+    def wait
+      return if @set
+
+      waiter = T.let(nil, T.nilable(Thread::Queue))
+      @mutex.synchronize do
+        unless @set
+          waiter = Thread::Queue.new
+          @waiters << waiter
+        end
+      end
+      waiter&.pop
+    end
+
+    # Marks the event as set and wakes all waiters.
+    # Called internally by the SDK when the attempt ends.
+    sig { void }
+    def set!
+      @mutex.synchronize do
+        @set = true
+        @waiters.each { |w| w.push(true) }
+        @waiters.clear
+      end
+    end
+  end
+
   # Request metadata available to handlers via +ctx.request+.
   #
   # @!attribute [r] id
@@ -11,7 +67,9 @@ module Restate
   #   @return [Hash{String => String}] request headers
   # @!attribute [r] body
   #   @return [String] raw input bytes
-  Request = Struct.new(:id, :headers, :body, keyword_init: true)
+  # @!attribute [r] attempt_finished_event
+  #   @return [AttemptFinishedEvent] signaled when this attempt ends
+  Request = Struct.new(:id, :headers, :body, :attempt_finished_event, keyword_init: true)
 
   # Base context interface for all Restate handlers.
   #

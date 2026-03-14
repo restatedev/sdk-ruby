@@ -216,6 +216,10 @@ module Restate
           # Client disconnected
         rescue StandardError => e
           LOGGER.error("Exception in handler: #{e.inspect}")
+        ensure
+          # Signal that the attempt is finished — wakes any waiters on
+          # ctx.request.attempt_finished_event and cancels pending background pool jobs.
+          context.on_attempt_finished
         end
 
         # Drain remaining output from VM

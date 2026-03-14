@@ -35,6 +35,7 @@ module Restate
       @send_output = T.let(send_output, T.untyped)
       @input_queue = T.let(input_queue, Async::Queue)
       @run_coros_to_execute = T.let({}, T::Hash[Integer, T.untyped])
+      @attempt_finished_event = T.let(AttemptFinishedEvent.new, AttemptFinishedEvent)
     end
 
     # ── Main entry point ──
@@ -77,6 +78,14 @@ module Restate
       end
     ensure
       @run_coros_to_execute.clear
+    end
+
+    # Called by the server when the attempt ends (handler completed, disconnected,
+    # or transient error). Signals the attempt_finished_event so that user code
+    # and background pool jobs can clean up.
+    sig { void }
+    def on_attempt_finished
+      @attempt_finished_event.set!
     end
 
     # ── State operations ──
@@ -475,7 +484,8 @@ module Restate
       @request ||= Request.new(
         id: @invocation.invocation_id,
         headers: @invocation.headers.to_h,
-        body: @invocation.input_buffer
+        body: @invocation.input_buffer,
+        attempt_finished_event: @attempt_finished_event
       )
     end
 
@@ -707,12 +717,12 @@ module Restate
       read_io, write_io = IO.pipe
       result = T.let(nil, T.untyped)
       error = T.let(nil, T.nilable(Exception))
-      cancelled = T.let(false, T::Boolean)
+      event = @attempt_finished_event
 
       begin
         BackgroundPool.submit do
-          if cancelled
-            # Invocation finished before pool picked up the job — skip.
+          if event.set?
+            # Attempt already finished before pool picked up the job — skip.
             next
           end
 
@@ -731,8 +741,6 @@ module Restate
 
         result
       ensure
-        # Signal cancellation so the pool worker skips if it hasn't started yet.
-        cancelled = true
         read_io.close unless read_io.closed?
         write_io.close unless write_io.closed?
       end
