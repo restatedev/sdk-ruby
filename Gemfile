@@ -5,6 +5,7 @@ source 'https://rubygems.org'
 gemspec
 
 group :development, :test do
+  gem 'base64'
   gem 'dry-struct', require: false
   gem 'rake', '~> 13.0'
   gem 'rake-compiler', '~> 1.2'
@@ -14,6 +15,5 @@ group :development, :test do
   gem 'rubocop-sorbet', require: false
   gem 'sorbet', require: false
   gem 'tapioca', require: false
-  gem 'base64'
   gem 'testcontainers-core', require: false
 end
