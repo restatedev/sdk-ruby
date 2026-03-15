@@ -105,7 +105,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
         result = decode_handle_result(type, raw)
 
       when 'awaitAny'
-        entries = cmd['commands'].map { |c| create_handle_for_command(ctx, c) }
+        entries = cmd['commands'].map { |c| create_handle_for_command(c) }
         handles = entries.map(&:last)
         ctx.wait_any_handle(handles)
         idx = entries.index { |_, h| ctx.completed?(h) }
@@ -114,7 +114,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
         result = decode_handle_result(type, raw)
 
       when 'awaitAnySuccessful'
-        entries = cmd['commands'].map { |c| create_handle_for_command(ctx, c) }
+        entries = cmd['commands'].map { |c| create_handle_for_command(c) }
         remaining = entries.dup
         found = false
         until remaining.empty?
