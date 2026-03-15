@@ -15,6 +15,7 @@ require_relative 'virtual_objects'
 require_relative 'workflow'
 require_relative 'service_communication'
 require_relative 'typed_handlers'
+require_relative 'typed_handlers_sorbet'
 
 endpoint = Restate.endpoint(
   Greeter,
@@ -22,7 +23,8 @@ endpoint = Restate.endpoint(
   Counter,
   UserSignup,
   Worker, FanOut,
-  TicketService
+  TicketService,
+  EventService
 )
 
 run endpoint.app

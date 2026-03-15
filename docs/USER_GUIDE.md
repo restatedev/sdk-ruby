@@ -962,6 +962,7 @@ The `examples/` directory contains runnable examples:
 | `workflow.rb` | Promises, signals, workflow state |
 | `service_communication.rb` | Calls, sends, fan-out/fan-in, `wait_any`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
+| `typed_handlers_sorbet.rb` | `input:`/`output:` with `T::Struct` (Sorbet), JSON Schema generation |
 
 Run any example:
 ```bash
