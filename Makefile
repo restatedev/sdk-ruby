@@ -1,4 +1,4 @@
-.PHONY: build compile test test-harness test-integration clean fmt check install typecheck lint lint-fix
+.PHONY: build compile test test-harness test-integration clean fmt check install typecheck lint lint-fix verify
 
 # Build the native extension and compile
 build: compile
@@ -49,6 +49,9 @@ install:
 # Build the gem
 gem: compile
 	gem build restate-sdk.gemspec
+
+# Build, lint, typecheck, and run unit tests (no integration tests)
+verify: compile lint typecheck test-harness
 
 # Run everything (install, compile, test, typecheck, lint)
 all: install compile test typecheck lint
