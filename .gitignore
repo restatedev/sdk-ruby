@@ -16,7 +16,6 @@ ext/restate_internal/target/
 # Bundler
 /.bundle/
 /vendor/bundle/
-Gemfile.lock
 
 # RSpec
 /coverage/
