@@ -518,12 +518,63 @@ run endpoint.app  # In config.ru
 
 ---
 
-## Typed Handlers (dry-struct)
+## Typed Handlers
 
-For structured input/output with automatic JSON Schema generation, use
-[dry-struct](https://dry-rb.org/gems/dry-struct/) (optional dependency).
+The `input:` and `output:` options on handler declarations let you use typed structs for
+handler I/O. The SDK automatically deserializes input JSON into struct instances and generates
+JSON Schema for Restate's discovery protocol.
+
+Two struct libraries are supported out of the box — pick whichever fits your project:
+
+### Using T::Struct (Sorbet)
+
+If you already use [Sorbet](https://sorbet.org/), `T::Struct` gives you full type safety
+and IDE support with no extra dependencies.
 
 ```ruby
+require 'restate'
+
+class GreetingRequest < T::Struct
+  const :name, String
+  const :greeting, T.nilable(String)
+end
+
+class Greeter < Restate::Service
+  handler :greet, input: GreetingRequest, output: String
+  def greet(request)
+    # request is a GreetingRequest instance, not a raw Hash
+    greeting = request.greeting || "Hello"
+    "#{greeting}, #{request.name}!"
+  end
+end
+```
+
+The SDK introspects `T::Struct` props to generate JSON Schema. Serialization uses
+`T::Struct#serialize` and `.from_hash`.
+
+Supported Sorbet type mappings:
+| Sorbet type | JSON Schema |
+|-------------|-------------|
+| `String` | `{type: 'string'}` |
+| `Integer` | `{type: 'integer'}` |
+| `Float` | `{type: 'number'}` |
+| `T::Boolean` | `{type: 'boolean'}` |
+| `T.nilable(String)` | `{anyOf: [{type: 'string'}, {type: 'null'}]}` |
+| `T::Array[String]` | `{type: 'array', items: {type: 'string'}}` |
+| `T::Hash[String, Integer]` | `{type: 'object'}` |
+| Nested `T::Struct` | Recursive object schema |
+
+### Using Dry::Struct
+
+[dry-struct](https://dry-rb.org/gems/dry-struct/) is a popular typed struct library that
+works without Sorbet. Add it as an optional dependency:
+
+```ruby
+gem 'dry-struct'
+```
+
+```ruby
+require 'restate'
 require 'dry-struct'
 
 module Types
@@ -545,12 +596,6 @@ class Greeter < Restate::Service
 end
 ```
 
-The SDK auto-detects `Dry::Struct` at runtime — no configuration needed. When a handler
-declares `input: GreetingRequest`:
-- Input JSON is deserialized into a `GreetingRequest` struct instance
-- JSON Schema is generated from the dry-types definitions and published via discovery
-- Output is serialized based on the `output:` type
-
 Supported dry-types mappings:
 | dry-types | JSON Schema |
 |-----------|-------------|
@@ -561,6 +606,36 @@ Supported dry-types mappings:
 | `Types::Integer.optional` | `{anyOf: [{type: 'integer'}, {type: 'null'}]}` |
 | `Types::Array.of(Types::String)` | `{type: 'array', items: {type: 'string'}}` |
 | Nested `Dry::Struct` | Recursive object schema |
+
+### How It Works
+
+Both struct types are auto-detected at runtime — no configuration needed. When a handler
+declares `input: MyRequest`:
+- Input JSON is deserialized into a struct instance (not a raw Hash)
+- JSON Schema is generated from the struct definition and published via Restate discovery
+- Output is serialized based on the `output:` type
+
+### Primitive Types
+
+You can also use primitive Ruby types for simple handlers:
+
+```ruby
+handler :greet, input: String, output: String
+handler :compute, input: Integer, output: Integer
+```
+
+These generate the corresponding JSON Schema (`{type: 'string'}`, `{type: 'integer'}`, etc.)
+and use standard JSON serialization.
+
+### Serde Resolution Order
+
+When `input:` or `output:` is provided, the SDK resolves a serde in this order:
+1. **Serde object** — if it responds to `serialize` and `deserialize`, use it directly
+2. **T::Struct subclass** — use `TStructSerde` (Sorbet native)
+3. **Dry::Struct subclass** — use `DryStructSerde`
+4. **Primitive type** (`String`, `Integer`, etc.) — use `JsonSerde` with type schema
+5. **Class with `.json_schema`** — use `JsonSerde` with that schema
+6. **Fallback** — `JsonSerde` with no schema
 
 ---
 

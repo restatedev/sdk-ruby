@@ -47,7 +47,7 @@ lib/
     ├── endpoint.rb                  Endpoint — holds services, builds Rack app
     ├── errors.rb                    TerminalError, SuspendedError, InternalError, DisconnectedError
     ├── handler.rb                   Handler, HandlerIO, ServiceTag structs + invoke_handler
-    ├── serde.rb                     JsonSerde, BytesSerde, NOT_SET sentinel, schema generation
+    ├── serde.rb                     JsonSerde, BytesSerde, TStructSerde, DryStructSerde, serde resolution
     ├── server.rb                    Rack 3 app — routes, I/O streaming, Async tasks
     ├── server_context.rb            ctx object — state, sleep, run, calls, progress loop
     ├── service.rb                   Stateless Service class + handler DSL
@@ -245,17 +245,20 @@ Useful for long-running handlers that need to flush work or perform cleanup befo
 - **`NOT_SET`** — frozen sentinel to distinguish "caller didn't pass serde" from `nil`.
 - **`Serde.resolve(type_or_serde)`** — resolves a type class or serde object into a serde
   with `serialize`/`deserialize`/`json_schema`. Priority: already a serde → use directly;
-  `Dry::Struct` subclass → `DryStructSerde`; primitive type → `TypeSerde` with schema;
-  class with `.json_schema` → `TypeSerde`; fallback → `JsonSerde`.
+  `T::Struct` subclass → `TStructSerde`; `Dry::Struct` subclass → `DryStructSerde`;
+  primitive type → `TypeSerde` with schema; class with `.json_schema` → `TypeSerde`;
+  fallback → `JsonSerde`.
 - **`TypeSerde`** — wraps a primitive type or custom-schema class. Delegates to `JsonSerde`
   for serialize/deserialize, adds `json_schema` from the type.
+- **`TStructSerde`** — for `T::Struct` subclasses (Sorbet). Deserializes JSON via
+  `T::Struct.from_hash`, serializes via `T::Struct#serialize`. Generates JSON Schema by
+  introspecting Sorbet `T::Types` (handles `Simple`, `Union`/nilable, `TypedArray`,
+  `TypedHash`, nested structs).
 - **`DryStructSerde`** — for `Dry::Struct` subclasses. Deserializes JSON into struct instances
   via `Struct.new(**hash)`, serializes via `to_h` + `JSON.generate`. Generates JSON Schema
   by introspecting dry-types (handles Nominal, Sum/optional, Array::Member, Constrained,
   nested structs).
 - **`PRIMITIVE_SCHEMAS`** — maps Ruby classes to JSON Schema hashes.
-- **`PRIMITIVE_JSON_SCHEMAS`** — maps class name strings to JSON Schema hashes (used by
-  dry-types converter).
 
 ### Error Types (`lib/restate/errors.rb`)
 
