@@ -17,6 +17,7 @@ module Restate
   #   - Output chunks are written directly to the streaming response body.
   class ServerContext
     include WorkflowContext
+    include WorkflowSharedContext
     extend T::Sig
 
     LOGGER = T.let(Logger.new($stdout, progname: 'Restate::ServerContext'), Logger)
@@ -43,8 +44,11 @@ module Restate
     # Runs the handler to completion, writing the output (or failure) to the journal.
     sig { void }
     def enter
+      Thread.current[:restate_context] = self
+      Thread.current[:restate_service_kind] = @handler.service_tag.kind
+      Thread.current[:restate_handler_kind] = @handler.kind
       in_buffer = @invocation.input_buffer
-      out_buffer = Restate.invoke_handler(handler: @handler, ctx: self, in_buffer: in_buffer)
+      out_buffer = Restate.invoke_handler(handler: @handler, in_buffer: in_buffer)
       @vm.sys_write_output_success(out_buffer.b)
       @vm.sys_end
     rescue TerminalError => e
@@ -78,6 +82,9 @@ module Restate
       end
     ensure
       @run_coros_to_execute.clear
+      Thread.current[:restate_context] = nil
+      Thread.current[:restate_service_kind] = nil
+      Thread.current[:restate_handler_kind] = nil
     end
 
     # Called by the server when the attempt ends (handler completed, disconnected,

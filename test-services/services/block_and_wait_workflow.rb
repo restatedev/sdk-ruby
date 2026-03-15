@@ -4,7 +4,8 @@
 require 'restate'
 
 class BlockAndWaitWorkflow < Restate::Workflow
-  main def run(ctx, input)
+  main def run(input)
+    ctx = Restate.current_workflow_context
     ctx.set('my-state', input)
     output = ctx.promise('durable-promise')
 
@@ -14,12 +15,14 @@ class BlockAndWaitWorkflow < Restate::Workflow
     output
   end
 
-  handler def unblock(ctx, output)
+  handler def unblock(output)
+    ctx = Restate.current_shared_workflow_context
     ctx.resolve_promise('durable-promise', output)
     nil
   end
 
-  handler def getState(ctx, _output) # rubocop:disable Naming/MethodName
+  handler def getState(_output) # rubocop:disable Naming/MethodName
+    ctx = Restate.current_shared_workflow_context
     ctx.get('my-state')
   end
 end

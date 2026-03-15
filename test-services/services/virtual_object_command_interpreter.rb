@@ -10,7 +10,8 @@ def decode_handle_result(type, raw)
   JSON.parse(raw)
 end
 
-def create_handle_for_command(ctx, cmd) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize
+def create_handle_for_command(cmd) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize
+  ctx = Restate.current_object_context
   case cmd['type']
   when 'createAwakeable'
     awk_id, future = ctx.awakeable
@@ -31,16 +32,19 @@ def create_handle_for_command(ctx, cmd) # rubocop:disable Metrics/MethodLength,M
 end
 
 class VirtualObjectCommandInterpreter < Restate::VirtualObject
-  shared def getResults(ctx) # rubocop:disable Naming/MethodName
+  shared def getResults # rubocop:disable Naming/MethodName
+    ctx = Restate.current_shared_context
     ctx.get('results') || []
   end
 
-  shared def hasAwakeable(ctx, awk_key) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
+  shared def hasAwakeable(awk_key) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
+    ctx = Restate.current_shared_context
     awk_id = ctx.get("awk-#{awk_key}")
     !awk_id.nil?
   end
 
-  shared def resolveAwakeable(ctx, req) # rubocop:disable Naming/MethodName
+  shared def resolveAwakeable(req) # rubocop:disable Naming/MethodName
+    ctx = Restate.current_shared_context
     awk_id = ctx.get("awk-#{req['awakeableKey']}")
     raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
@@ -48,7 +52,8 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
     nil
   end
 
-  shared def rejectAwakeable(ctx, req) # rubocop:disable Naming/MethodName
+  shared def rejectAwakeable(req) # rubocop:disable Naming/MethodName
+    ctx = Restate.current_shared_context
     awk_id = ctx.get("awk-#{req['awakeableKey']}")
     raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
@@ -56,7 +61,8 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
     nil
   end
 
-  handler def interpretCommands(ctx, req) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Naming/MethodName,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
+  handler def interpretCommands(req) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Naming/MethodName,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
+    ctx = Restate.current_object_context
     result = ''
 
     req['commands'].each do |cmd| # rubocop:disable Metrics/BlockLength
@@ -94,7 +100,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
         result = ctx.run('get_env') { ENV.fetch(env_name, '') }.await
 
       when 'awaitOne'
-        type, handle = create_handle_for_command(ctx, cmd['command'])
+        type, handle = create_handle_for_command(cmd['command'])
         raw = ctx.resolve_handle(handle)
         result = decode_handle_result(type, raw)
 

@@ -70,4 +70,88 @@ module Restate
     identity_keys&.each { |k| ep.identity_key(k) }
     ep
   end
+
+  # ── Fiber-local context accessors ──
+  #
+  # The SDK stores the current handler context in fiber-local storage
+  # (Thread.current[], which is fiber-scoped in Ruby). These methods
+  # retrieve it with the appropriate type for IDE completion.
+  #
+  # Use these instead of the +ctx+ parameter when you need the context
+  # from a nested method that doesn't have +ctx+ in scope.
+
+  # Returns the current context for a Service handler.
+  # Raises if called outside a Restate handler.
+  #
+  # @return [Context]
+  sig { returns(Context) }
+  def current_context
+    fetch_context!
+  end
+
+  # Returns the current context for a VirtualObject exclusive handler.
+  # Raises if not inside a VirtualObject exclusive handler.
+  #
+  # @return [ObjectContext]
+  sig { returns(ObjectContext) }
+  def current_object_context
+    fetch_context!(service_kind: 'object', handler_kind: 'exclusive')
+  end
+
+  # Returns the current context for a VirtualObject shared handler.
+  # Read-only state: +get+ and +state_keys+ only, no +set+/+clear+.
+  # Raises if not inside a VirtualObject shared handler.
+  #
+  # @return [ObjectSharedContext]
+  sig { returns(ObjectSharedContext) }
+  def current_shared_context
+    fetch_context!(service_kind: 'object', handler_kind: 'shared')
+  end
+
+  # Returns the current context for a Workflow main handler.
+  # Raises if not inside a Workflow main handler.
+  #
+  # @return [WorkflowContext]
+  sig { returns(WorkflowContext) }
+  def current_workflow_context
+    fetch_context!(service_kind: 'workflow', handler_kind: 'workflow')
+  end
+
+  # Returns the current context for a Workflow shared handler.
+  # Read-only state: +get+ and +state_keys+ only, no +set+/+clear+.
+  # Raises if not inside a Workflow shared handler.
+  #
+  # @return [WorkflowSharedContext]
+  sig { returns(WorkflowSharedContext) }
+  def current_shared_workflow_context
+    fetch_context!(service_kind: 'workflow', handler_kind: 'shared')
+  end
+
+  # @!visibility private
+  sig do
+    params(service_kind: T.nilable(String), handler_kind: T.nilable(String)).returns(ServerContext)
+  end
+  def fetch_context!(service_kind: nil, handler_kind: nil) # rubocop:disable Metrics
+    ctx = Thread.current[:restate_context]
+    unless ctx
+      Kernel.raise 'Not inside a Restate handler. ' \
+                   'Context accessors can only be called during handler execution.'
+    end
+
+    if service_kind
+      actual_service = Thread.current[:restate_service_kind]
+      unless actual_service == service_kind
+        Kernel.raise "Expected a #{service_kind} handler, but current handler is #{actual_service || 'unknown'}."
+      end
+    end
+
+    if handler_kind
+      actual_handler = Thread.current[:restate_handler_kind]
+      unless actual_handler == handler_kind
+        Kernel.raise "Expected a #{handler_kind} handler, but current handler kind is #{actual_handler || 'unknown'}."
+      end
+    end
+
+    T.cast(ctx, ServerContext)
+  end
 end

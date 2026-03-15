@@ -6,13 +6,12 @@ module Restate
   #
   # Class-based API (preferred):
   #   class Signup < Restate::Workflow
-  #     # @param ctx [Restate::WorkflowContext]
-  #     main def run(ctx, email)
+  #     main def run(email)
   #       # workflow logic
   #     end
   #
-  #     # @param ctx [Restate::WorkflowContext]
-  #     handler def status(ctx)
+  #     handler def status
+  #       ctx = Restate.current_workflow_context
   #       ctx.get("status")
   #     end
   #   end
@@ -29,7 +28,7 @@ module Restate
     # -- Class-level DSL (for subclasses) --
 
     # Register the main workflow entry point.
-    # Use as: +main def run(ctx, arg)+ or +main :run, input: String+
+    # Use as: +main def run(arg)+ or +main :run, input: String+
     #
     # @param method_name [Symbol] name of the method to register
     # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
@@ -96,7 +95,7 @@ module Restate
     # @param name [String] the handler name
     # @param input [Class, #serialize, nil] type or serde for input deserialization
     # @param output [Class, #serialize, nil] type or serde for output serialization
-    # @yield [ctx, input] the handler block
+    # @yield [input] the handler block (access context via Restate.current_workflow_context)
     # @return [self]
     def main(name, accept: 'application/json', content_type: 'application/json',
              input: nil, output: nil, &block)
@@ -124,7 +123,7 @@ module Restate
     # @param name [String] the handler name
     # @param input [Class, #serialize, nil] type or serde for input deserialization
     # @param output [Class, #serialize, nil] type or serde for output serialization
-    # @yield [ctx, input] the handler block
+    # @yield [input] the handler block (access context via Restate.current_workflow_context)
     # @return [self]
     def handler(name, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)

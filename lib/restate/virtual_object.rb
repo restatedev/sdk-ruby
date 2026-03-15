@@ -6,15 +6,15 @@ module Restate
   #
   # Class-based API (preferred):
   #   class Counter < Restate::VirtualObject
-  #     # @param ctx [Restate::ObjectContext]
-  #     handler def add(ctx, addend)
+  #     handler def add(addend)
+  #       ctx = Restate.current_object_context
   #       old = ctx.get("count") || 0
   #       ctx.set("count", old + addend)
   #       old + addend
   #     end
   #
-  #     # @param ctx [Restate::ObjectContext]
-  #     shared def get(ctx)
+  #     shared def get
+  #       ctx = Restate.current_object_context
   #       ctx.get("count") || 0
   #     end
   #   end
@@ -30,7 +30,7 @@ module Restate
 
     # -- Class-level DSL (for subclasses) --
 
-    # Register an exclusive handler. Use as: +handler def my_method(ctx, arg)+
+    # Register an exclusive handler. Use as: +handler def my_method(arg)+
     #
     # @param method_name [Symbol] name of the method to register
     # @param kind [Symbol] concurrency mode (+:exclusive+ or +:shared+)
@@ -97,7 +97,7 @@ module Restate
     # @param kind [Symbol] concurrency mode (+:exclusive+ or +:shared+)
     # @param input [Class, #serialize, nil] type or serde for input deserialization
     # @param output [Class, #serialize, nil] type or serde for output serialization
-    # @yield [ctx, input] the handler block
+    # @yield [input] the handler block (access context via Restate.current_object_context)
     # @return [self]
     def handler(name, kind: :exclusive, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)

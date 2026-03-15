@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 #
@@ -19,7 +19,8 @@ require 'restate'
 
 class Greeter < Restate::Service
   handler :greet, input: String, output: String
-  def greet(ctx, name)
+  def greet(name)
+    ctx = Restate.current_context
     # run_sync: durable side effect, returns the value directly
     ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   end

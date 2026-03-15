@@ -4,7 +4,8 @@
 require 'restate'
 
 class Proxy < Restate::Service
-  handler def call(ctx, req)
+  handler def call(req)
+    ctx = Restate.current_context
     result = ctx.generic_call(
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
       key: req['virtualObjectKey'], idempotency_key: req['idempotencyKey']
@@ -12,7 +13,8 @@ class Proxy < Restate::Service
     result.bytes
   end
 
-  handler def oneWayCall(ctx, req) # rubocop:disable Naming/MethodName
+  handler def oneWayCall(req) # rubocop:disable Naming/MethodName
+    ctx = Restate.current_context
     delay_seconds = req['delayMillis'] ? req['delayMillis'] / 1000.0 : nil
     handle = ctx.generic_send(
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
@@ -21,7 +23,8 @@ class Proxy < Restate::Service
     handle.invocation_id
   end
 
-  handler def manyCalls(ctx, requests) # rubocop:disable Naming/MethodName,Metrics/AbcSize,Metrics/MethodLength
+  handler def manyCalls(requests) # rubocop:disable Naming/MethodName,Metrics/AbcSize,Metrics/MethodLength
+    ctx = Restate.current_context
     to_await = []
     requests.each do |req|
       pr = req['proxyRequest']

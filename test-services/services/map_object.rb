@@ -4,16 +4,19 @@
 require 'restate'
 
 class MapObject < Restate::VirtualObject
-  handler def set(ctx, entry)
+  handler def set(entry)
+    ctx = Restate.current_object_context
     ctx.set(entry['key'], entry['value'])
     nil
   end
 
-  handler def get(ctx, key)
+  handler def get(key)
+    ctx = Restate.current_object_context
     ctx.get(key) || ''
   end
 
-  handler def clearAll(ctx) # rubocop:disable Naming/MethodName
+  handler def clearAll # rubocop:disable Naming/MethodName
+    ctx = Restate.current_object_context
     entries = []
     ctx.state_keys.each do |key|
       value = ctx.get(key)

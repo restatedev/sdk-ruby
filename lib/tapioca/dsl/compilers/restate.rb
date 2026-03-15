@@ -8,12 +8,9 @@ module Tapioca
     module Compilers
       # Generates Sorbet sigs for Restate handler methods.
       #
-      # For each handler registered via the +handler+, +shared+, or +main+ DSL,
-      # this compiler generates a method sig with the correct context type:
-      #
-      #   - Service handlers       -> Restate::Context
-      #   - VirtualObject handlers -> Restate::ObjectContext
-      #   - Workflow handlers      -> Restate::WorkflowContext
+      # Handlers no longer receive +ctx+ as a parameter — context is accessed
+      # via fiber-local +Restate.current_context+ (or typed variants). This
+      # compiler generates sigs reflecting the actual handler arity (0 or 1).
       #
       # Usage:
       #   bundle exec tapioca dsl
@@ -34,26 +31,10 @@ module Tapioca
           end
         end
 
-        def decorate # rubocop:disable Metrics
+        def decorate
           root.create_path(constant) do |klass|
-            ctx_type = if constant.is_a?(Class) && constant < ::Restate::Workflow
-                         '::Restate::WorkflowContext'
-                       elsif constant.is_a?(Class) && constant < ::Restate::VirtualObject
-                         '::Restate::ObjectContext'
-                       else
-                         '::Restate::Context'
-                       end
-
             constant.handlers.each do |name, handler|
-              params = if handler.arity == 2
-                         [
-                           create_param('ctx', type: ctx_type),
-                           create_param('input', type: 'T.untyped')
-                         ]
-                       else
-                         [create_param('ctx', type: ctx_type)]
-                       end
-
+              params = handler.arity == 1 ? [create_param('input', type: 'T.untyped')] : []
               klass.create_method(name, parameters: params, return_type: 'T.untyped')
             end
           end

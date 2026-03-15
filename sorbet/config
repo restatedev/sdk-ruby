@@ -2,7 +2,6 @@
 .
 --ignore=ext/
 --ignore=spec/
---ignore=examples/
 --ignore=.bundle/
 --ignore=.gem/
 --ignore=vendor/

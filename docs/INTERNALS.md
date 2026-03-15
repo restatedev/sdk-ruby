@@ -145,8 +145,19 @@ This is the most complex part. See [Invocation Execution Flow](#invocation-execu
 
 ### ServerContext (`lib/restate/server_context.rb`)
 
-The `ctx` object passed to every handler. Implements:
+The context object accessed via fiber-local accessors (e.g., `Restate.current_context`). Implements:
 
+- **Fiber-local context storage** — `enter` sets the current context, service kind, and handler
+  kind in fiber-local storage (`Thread.current[:restate_context]`, `:restate_service_kind`,
+  `:restate_handler_kind`) before invoking the handler, and clears them in an `ensure` block.
+  This enables `Restate.current_context` and the type-specific accessors to retrieve the context
+  from anywhere within the handler's fiber. Each accessor validates both service kind and handler
+  kind at runtime. The context hierarchy provides type safety:
+  - `Context` — base (run, sleep, calls, awakeables)
+  - `ObjectSharedContext` — read-only state (get, state_keys, key)
+  - `ObjectContext` — full state (+ set, clear, clear_all)
+  - `WorkflowSharedContext` — read-only state + promises
+  - `WorkflowContext` — full state + promises
 - **Progress loop** (`poll_or_cancel`) — the core execution driver.
 - **Public context API** — `get`, `set`, `clear`, `clear_all`, `state_keys`, `sleep`, `run`,
   `run_sync`, `service_call`, `service_send`, `object_call`, `object_send`, `workflow_call`,
@@ -189,7 +200,7 @@ instance state should go through `ctx.get`/`ctx.set`.
 ### Handler Dispatch (`lib/restate/handler.rb`)
 
 `Restate.invoke_handler` deserializes input via `handler_io.input_serde`, calls the block with
-`(ctx)` or `(ctx, input)` based on arity, then serializes output via `handler_io.output_serde`.
+`()` or `(input)` based on arity, then serializes output via `handler_io.output_serde`.
 
 **Data structures:**
 - `ServiceTag` = `Struct.new(:kind, :name, :description, :metadata)`
@@ -215,6 +226,16 @@ Three classes for async result handling:
 - `invocation_id` — lazily resolved
 - `cancel` — calls `ctx.cancel_invocation(invocation_id)`
 - No `await` (fire-and-forget)
+
+### AttemptFinishedEvent
+
+Available via `ctx.request.attempt_finished_event`. Signals when the current invocation attempt
+is about to finish (e.g., connection closing). Two methods:
+
+- **`set?`** — non-blocking check, returns `true` if the attempt has finished.
+- **`wait`** — blocks the current fiber until the attempt finishes.
+
+Useful for long-running handlers that need to flush work or perform cleanup before the attempt ends.
 
 ### Serialization (`lib/restate/serde.rb`)
 

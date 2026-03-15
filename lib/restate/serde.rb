@@ -94,6 +94,7 @@ module Restate
     def resolve(type_or_serde)
       return JsonSerde if type_or_serde.nil?
       return type_or_serde if serde?(type_or_serde)
+      return TStructSerde.new(type_or_serde) if t_struct?(type_or_serde)
       return DryStructSerde.new(type_or_serde) if dry_struct?(type_or_serde)
       return TypeSerde.new(type_or_serde, PRIMITIVE_SCHEMAS[type_or_serde]) if PRIMITIVE_SCHEMAS.key?(type_or_serde)
       return TypeSerde.new(type_or_serde, type_or_serde.json_schema) if type_or_serde.respond_to?(:json_schema)
@@ -101,10 +102,56 @@ module Restate
       JsonSerde
     end
 
+    # Check if a value is a T::Struct subclass.
+    sig { params(val: T.untyped).returns(T::Boolean) }
+    def t_struct?(val)
+      !!(val.is_a?(Class) && val < T::Struct)
+    end
+
     # Check if a value is a Dry::Struct subclass.
     sig { params(val: T.untyped).returns(T.nilable(T::Boolean)) }
     def dry_struct?(val)
       defined?(::Dry::Struct) && val.is_a?(Class) && val < ::Dry::Struct
+    end
+
+    # Generate a JSON Schema from a T::Struct class by introspecting its props.
+    sig { params(struct_class: T.class_of(T::Struct)).returns(T::Hash[String, T.untyped]) }
+    def t_struct_to_json_schema(struct_class) # rubocop:disable Metrics
+      properties = {}
+      required = []
+
+      T.unsafe(struct_class).props.each do |name, meta|
+        prop_name = (meta[:serialized_form] || name).to_s
+        properties[prop_name] = t_type_to_json_schema(meta[:type_object] || meta[:type])
+        required << prop_name unless meta[:fully_optional] || meta[:_tnilable]
+      end
+
+      schema = { 'type' => 'object', 'properties' => properties }
+      schema['required'] = required unless required.empty?
+      schema
+    end
+
+    # Convert a Sorbet T::Types type object to a JSON Schema hash.
+    sig { params(type: T.untyped).returns(T::Hash[String, T.untyped]) }
+    def t_type_to_json_schema(type) # rubocop:disable Metrics
+      case type
+      when T::Types::Simple
+        PRIMITIVE_SCHEMAS[type.raw_type] || {}
+      when T::Types::Union
+        schemas = type.types.map { |t| t_type_to_json_schema(t) }
+        schemas.uniq!
+        schemas.length == 1 ? schemas.first : { 'anyOf' => schemas }
+      when T::Types::TypedArray
+        { 'type' => 'array', 'items' => t_type_to_json_schema(type.type) }
+      when T::Types::TypedHash
+        { 'type' => 'object' }
+      when Class
+        return t_struct_to_json_schema(type) if type < T::Struct
+
+        PRIMITIVE_SCHEMAS[type] || {}
+      else
+        {}
+      end
     end
 
     # Generate a JSON Schema from a Dry::Struct class.
@@ -224,6 +271,43 @@ module Restate
     sig { returns(T::Hash[String, T.untyped]) }
     def json_schema
       @json_schema ||= Serde.dry_struct_to_json_schema(@struct_class)
+    end
+  end
+
+  # Serde for T::Struct types (Sorbet's native typed structs).
+  # Uses T::Struct#serialize for output and T::Struct.from_hash for input.
+  # Generates JSON Schema from T::Struct props introspection.
+  class TStructSerde
+    extend T::Sig
+
+    # Create a TStructSerde for the given T::Struct subclass.
+    sig { params(struct_class: T.class_of(T::Struct)).void }
+    def initialize(struct_class)
+      @struct_class = struct_class
+    end
+
+    # Serialize a T::Struct instance to JSON bytes.
+    sig { params(obj: T.untyped).returns(String) }
+    def serialize(obj)
+      return ''.b if obj.nil?
+
+      hash = obj.is_a?(T::Struct) ? obj.serialize : obj
+      JSON.generate(hash).b
+    end
+
+    # Deserialize JSON bytes into a T::Struct instance.
+    sig { params(buf: T.nilable(String)).returns(T.untyped) }
+    def deserialize(buf)
+      return nil if buf.nil? || buf.empty?
+
+      hash = JSON.parse(buf)
+      T.unsafe(@struct_class).from_hash(hash)
+    end
+
+    # Return the JSON Schema derived from the T::Struct props.
+    sig { returns(T::Hash[String, T.untyped]) }
+    def json_schema
+      @json_schema ||= Serde.t_struct_to_json_schema(@struct_class)
     end
   end
 end

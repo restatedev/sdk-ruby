@@ -233,9 +233,9 @@ module Restate
     def key; end
   end
 
-  # Context interface for VirtualObject handlers.
-  # Extends {Context} with durable key/value state operations.
-  module ObjectContext
+  # Context interface for VirtualObject shared handlers (read-only state).
+  # Extends {Context} with +get+, +state_keys+, and +key+ — but no mutations.
+  module ObjectSharedContext
     extend T::Sig
     extend T::Helpers
 
@@ -245,6 +245,20 @@ module Restate
     # Durably retrieve a state entry. Returns nil if unset.
     sig { abstract.params(name: String, serde: T.untyped).returns(T.untyped) }
     def get(name, serde: JsonSerde); end
+
+    # List all state entry names.
+    sig { abstract.returns(T.untyped) }
+    def state_keys; end
+  end
+
+  # Context interface for VirtualObject exclusive handlers (full state access).
+  # Extends {ObjectSharedContext} with mutating state operations.
+  module ObjectContext
+    extend T::Sig
+    extend T::Helpers
+
+    abstract!
+    include ObjectSharedContext
 
     # Durably set a state entry.
     sig { abstract.params(name: String, value: T.untyped, serde: T.untyped).void }
@@ -257,13 +271,35 @@ module Restate
     # Durably remove all state entries.
     sig { abstract.void }
     def clear_all; end
-
-    # List all state entry names.
-    sig { abstract.returns(T.untyped) }
-    def state_keys; end
   end
 
-  # Context interface for Workflow handlers.
+  # Context interface for Workflow shared handlers (read-only state + promises).
+  # Extends {ObjectSharedContext} with durable promise operations.
+  module WorkflowSharedContext
+    extend T::Sig
+    extend T::Helpers
+
+    abstract!
+    include ObjectSharedContext
+
+    # Get a durable promise value, blocking until resolved.
+    sig { abstract.params(name: String, serde: T.untyped).returns(T.untyped) }
+    def promise(name, serde: JsonSerde); end
+
+    # Peek at a durable promise without blocking. Returns nil if not yet resolved.
+    sig { abstract.params(name: String, serde: T.untyped).returns(T.untyped) }
+    def peek_promise(name, serde: JsonSerde); end
+
+    # Resolve a durable promise with a value.
+    sig { abstract.params(name: String, payload: T.untyped, serde: T.untyped).void }
+    def resolve_promise(name, payload, serde: JsonSerde); end
+
+    # Reject a durable promise with a terminal failure.
+    sig { abstract.params(name: String, message: String, code: Integer).void }
+    def reject_promise(name, message, code: 500); end
+  end
+
+  # Context interface for Workflow main handler (full state + promises).
   # Extends {ObjectContext} with durable promise operations.
   module WorkflowContext
     extend T::Sig

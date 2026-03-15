@@ -17,17 +17,11 @@ require_relative 'service_communication'
 require_relative 'typed_handlers'
 
 endpoint = Restate.endpoint(
-  # greeter.rb
   Greeter,
-  # durable_execution.rb
   SubscriptionService,
-  # virtual_objects.rb
   Counter,
-  # workflow.rb
   UserSignup,
-  # service_communication.rb
   Worker, FanOut,
-  # typed_handlers.rb
   TicketService
 )
 

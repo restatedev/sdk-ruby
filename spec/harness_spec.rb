@@ -21,47 +21,81 @@ end
 
 class TestGreeter < Restate::Service
   handler :greet
-  def greet(ctx, name)
+  def greet(name)
+    ctx = Restate.current_context
     ctx.run("build-greeting") { "Hello, #{name}!" }.await
   end
 end
 
 class TestCounter < Restate::VirtualObject
-  handler def add(ctx, addend)
+  handler def add(addend)
+    ctx = Restate.current_object_context
     old_value = ctx.get("count") || 0
     new_value = old_value + addend
     ctx.set("count", new_value)
     {"oldValue" => old_value, "newValue" => new_value}
   end
 
-  shared def get(ctx)
+  shared def get
+    ctx = Restate.current_shared_context
     ctx.get("count") || 0
   end
 end
 
 class TestWorker < Restate::Service
-  handler def process(ctx, input)
+  handler def process(input)
+    ctx = Restate.current_context
     ctx.run("do-work") { "processed:#{input}" }.await
   end
 end
 
 class TestOrchestrator < Restate::Service
-  handler def orchestrate(ctx, input)
+  handler def orchestrate(input)
+    ctx = Restate.current_context
     result = ctx.service_call(TestWorker, :process, input).await
     "orchestrated:#{result}"
   end
 end
 
 class TestRunSync < Restate::Service
-  handler def compute(ctx, input)
+  handler def compute(input)
+    ctx = Restate.current_context
     result = ctx.run_sync("heavy-computation") { input * 2 }
     "result:#{result}"
   end
 end
 
+class TestFiberLocalCtx < Restate::Service
+  handler def process(input)
+    # Access context via fiber-local accessor instead of ctx parameter
+    do_work(input)
+  end
+
+  private
+
+  def do_work(input)
+    ctx = Restate.current_context
+    result = ctx.run_sync('step') { "processed:#{input}" }
+    "fiber_local:#{result}"
+  end
+end
+
+class TStructRequest < T::Struct
+  const :name, String
+  const :greeting, T.nilable(String)
+end
+
+class TStructGreeter < Restate::Service
+  handler :greet, input: TStructRequest, output: String
+  def greet(request)
+    greeting = request.greeting || "Hello"
+    "#{greeting}, #{request.name}!"
+  end
+end
+
 class TypedGreeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(ctx, request)
+  def greet(request)
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
   end
@@ -83,7 +117,8 @@ end
 RSpec.describe Restate::Testing do
   before(:all) do
     @harness = Restate::Testing::RestateTestHarness.new(
-      TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TypedGreeter
+      TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TestFiberLocalCtx,
+      TStructGreeter, TypedGreeter
     )
     @harness.start
   end
@@ -120,10 +155,29 @@ RSpec.describe Restate::Testing do
     expect(JSON.parse(response.body)).to eq("result:42")
   end
 
+  it "accesses context via Restate.current_context (fiber-local)" do
+    response = post_json(@harness.ingress_url, "/TestFiberLocalCtx/process", "hello")
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("fiber_local:processed:hello")
+  end
+
   it "supports service-to-service calls" do
     response = post_json(@harness.ingress_url, "/TestOrchestrator/orchestrate", "hello")
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("orchestrated:processed:hello")
+  end
+
+  it "handles typed T::Struct input" do
+    response = post_json(@harness.ingress_url, "/TStructGreeter/greet", { "name" => "World" })
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("Hello, World!")
+  end
+
+  it "handles typed T::Struct input with optional field" do
+    response = post_json(@harness.ingress_url, "/TStructGreeter/greet",
+                         { "name" => "World", "greeting" => "Hey" })
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("Hey, World!")
   end
 
   it "handles typed dry-struct input" do

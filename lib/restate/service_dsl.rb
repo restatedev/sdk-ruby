@@ -9,7 +9,8 @@ module Restate
   #
   # @example
   #   class Counter < Restate::VirtualObject
-  #     handler def add(ctx, addend)
+  #     handler def add(addend)
+  #       ctx = Restate.current_object_context
   #       old = ctx.get('counter') || 0
   #       ctx.set('counter', old + addend)
   #       old + addend
@@ -80,8 +81,8 @@ module Restate
 
         um = T.unsafe(self).instance_method(name)
         arity = um.arity.abs
-        unless [1, 2].include?(arity)
-          Kernel.raise ArgumentError, "handler '#{name}' must accept 1 or 2 parameters (ctx, [input]), got #{arity}"
+        unless [0, 1].include?(arity)
+          Kernel.raise ArgumentError, "handler '#{name}' must accept 0 or 1 parameters ([input]), got #{arity}"
         end
 
         bound = um.bind(instance)

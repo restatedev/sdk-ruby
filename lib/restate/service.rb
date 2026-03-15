@@ -7,7 +7,7 @@ module Restate
   # Class-based API (preferred):
   #   class Greeter < Restate::Service
   #     # @param ctx [Restate::Context]
-  #     handler def greet(ctx, name)
+  #     handler def greet(name)
   #       "Hello, #{name}!"
   #     end
   #   end
@@ -24,7 +24,7 @@ module Restate
     # -- Class-level DSL (for subclasses) --
 
     # Register a handler method on this service.
-    # Use as: +handler def my_method(ctx, arg)+ or +handler :my_method, input: String+
+    # Use as: +handler def my_method(arg)+ or +handler :my_method, input: String+
     #
     # @param method_name [Symbol] name of the method to register
     # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)
@@ -76,7 +76,7 @@ module Restate
     # @param name [String] the handler name
     # @param input [Class, #serialize, nil] type or serde for input deserialization
     # @param output [Class, #serialize, nil] type or serde for output serialization
-    # @yield [ctx, input] the handler block
+    # @yield [input] the handler block (access context via Restate.current_context)
     # @return [self]
     def handler(name, accept: 'application/json', content_type: 'application/json',
                 input: nil, output: nil, &block)

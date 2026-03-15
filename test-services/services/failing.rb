@@ -4,18 +4,19 @@
 require 'restate'
 
 class Failing < Restate::VirtualObject
-  handler def terminallyFailingCall(_ctx, msg) # rubocop:disable Naming/MethodName
+  handler def terminallyFailingCall(msg) # rubocop:disable Naming/MethodName
     raise Restate::TerminalError, msg
   end
 
-  handler def callTerminallyFailingCall(ctx, msg) # rubocop:disable Naming/MethodName
+  handler def callTerminallyFailingCall(msg) # rubocop:disable Naming/MethodName
+    ctx = Restate.current_object_context
     ctx.object_call('Failing', 'terminallyFailingCall', 'random-583e1bf2', msg).await
     raise 'Should not reach here'
   end
 
   $failures = 0 # rubocop:disable Style/GlobalVars
 
-  handler def failingCallWithEventualSuccess(_ctx) # rubocop:disable Naming/MethodName
+  handler def failingCallWithEventualSuccess # rubocop:disable Naming/MethodName
     $failures += 1 # rubocop:disable Style/GlobalVars
     raise "Failed at attempt: #{$failures}" unless $failures >= 4 # rubocop:disable Style/GlobalVars
 
@@ -23,7 +24,8 @@ class Failing < Restate::VirtualObject
     4
   end
 
-  handler def terminallyFailingSideEffect(ctx, error_message) # rubocop:disable Naming/MethodName
+  handler def terminallyFailingSideEffect(error_message) # rubocop:disable Naming/MethodName
+    ctx = Restate.current_object_context
     (ctx.run('sideEffect') do
       raise Restate::TerminalError, error_message
     end).await
@@ -32,7 +34,8 @@ class Failing < Restate::VirtualObject
 
   $eventual_success_side_effects = 0 # rubocop:disable Style/GlobalVars
 
-  handler def sideEffectSucceedsAfterGivenAttempts(ctx, minimum_attempts) # rubocop:disable Naming/MethodName,Metrics/MethodLength
+  handler def sideEffectSucceedsAfterGivenAttempts(minimum_attempts) # rubocop:disable Naming/MethodName,Metrics/MethodLength
+    ctx = Restate.current_object_context
     retry_policy = Restate::RunRetryPolicy.new(
       max_attempts: minimum_attempts + 1,
       initial_interval: 1,
@@ -50,7 +53,8 @@ class Failing < Restate::VirtualObject
 
   $eventual_failure_side_effects = 0 # rubocop:disable Style/GlobalVars
 
-  handler def sideEffectFailsAfterGivenAttempts(ctx, retry_policy_max_retry_count) # rubocop:disable Naming/MethodName,Metrics/MethodLength
+  handler def sideEffectFailsAfterGivenAttempts(retry_policy_max_retry_count) # rubocop:disable Naming/MethodName,Metrics/MethodLength
+    ctx = Restate.current_object_context
     retry_policy = Restate::RunRetryPolicy.new(
       max_attempts: retry_policy_max_retry_count,
       initial_interval: 1,

@@ -1,4 +1,4 @@
-# typed: false
+# typed: ignore # rubocop:disable Sorbet/FalseSigil
 # frozen_string_literal: true
 
 #
@@ -58,7 +58,8 @@ class TicketService < Restate::Service # rubocop:disable Style/OneClassPerFile
   # input: and output: accept type classes — the SDK auto-resolves
   # serde and JSON Schema from Dry::Struct definitions.
   handler :reserve, input: ReservationRequest, output: ReservationResponse
-  def reserve(ctx, request) # rubocop:disable Metrics/MethodLength
+  def reserve(request) # rubocop:disable Metrics/MethodLength
+    ctx = Restate.current_context
     # request is a ReservationRequest instance, not a raw Hash
     reservation_id = ctx.run_sync('create-reservation') do
       "res_#{request.concert}_#{rand(10_000)}"
@@ -81,7 +82,7 @@ class TicketService < Restate::Service # rubocop:disable Style/OneClassPerFile
 
   # Primitive types also generate JSON Schema for discovery
   handler :lookup, input: String, output: String
-  def lookup(_ctx, reservation_id)
+  def lookup(reservation_id)
     "status for #{reservation_id}: confirmed"
   end
 end
