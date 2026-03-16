@@ -23,6 +23,7 @@ module Restate
       subclass.instance_variable_set(:@_handler_registry, {})
       subclass.instance_variable_set(:@_service_name, nil)
       subclass.instance_variable_set(:@_handlers, nil)
+      subclass.instance_variable_set(:@_enable_lazy_state, nil)
     end
 
     # Get or set the service name. Defaults to the unqualified class name.
@@ -37,12 +38,25 @@ module Restate
       end
     end
 
+    # Enable lazy state loading for all handlers in this service.
+    # When enabled, state is fetched on demand rather than pre-loaded.
+    #
+    # @param value [Boolean] whether to enable lazy state
+    def enable_lazy_state(value = true) # rubocop:disable Style/OptionalBooleanParameter
+      @_enable_lazy_state = value
+    end
+
     # Returns the ServiceTag for this class-based service.
     # Subclasses must define +_service_kind+.
     #
     # @return [ServiceTag]
     def service_tag
       ServiceTag.new(kind: T.unsafe(self)._service_kind, name: service_name)
+    end
+
+    # Returns the service-level lazy state setting (nil if not set).
+    def lazy_state?
+      @_enable_lazy_state
     end
 
     # Returns a hash of handler name (String) to Handler.
@@ -93,7 +107,8 @@ module Restate
           kind: meta[:kind],
           name: name,
           callable: bound,
-          arity: arity
+          arity: arity,
+          enable_lazy_state: meta[:enable_lazy_state]
         )
       end
 

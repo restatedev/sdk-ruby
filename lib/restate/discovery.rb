@@ -51,7 +51,7 @@ module Restate
     end
 
     sig { params(service: T.any(Service, VirtualObject, Workflow)).returns(T::Hash[Symbol, T.untyped]) }
-    def build_service(service)
+    def build_service(service) # rubocop:disable Metrics/AbcSize
       service_type = SERVICE_TYPES.fetch(service.service_tag.kind)
 
       handlers = service.handlers.values.map do |handler|
@@ -59,12 +59,14 @@ module Restate
       end
 
       svc_name = service.respond_to?(:service_name) ? service.service_name : service.name
+      lazy_state = service.respond_to?(:lazy_state?) ? T.unsafe(service).lazy_state? : nil
       compact({
                 name: svc_name,
                 ty: service_type,
                 handlers: handlers,
                 documentation: service.service_tag.description,
-                metadata: service.service_tag.metadata
+                metadata: service.service_tag.metadata,
+                enableLazyState: lazy_state
               })
     end
 
@@ -88,7 +90,8 @@ module Restate
                 name: handler.name,
                 ty: ty,
                 input: compact(input_payload),
-                output: compact(output_payload)
+                output: compact(output_payload),
+                enableLazyState: handler.enable_lazy_state
               })
     end
 

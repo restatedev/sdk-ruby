@@ -17,6 +17,7 @@ module Restate
   # A registered handler with its metadata and callable block.
   Handler = Struct.new(
     :service_tag, :handler_io, :kind, :name, :callable, :arity,
+    :enable_lazy_state,
     keyword_init: true
   )
 
