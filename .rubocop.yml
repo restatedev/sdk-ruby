@@ -8,8 +8,10 @@ AllCops:
   Exclude:
     - "ext/**/*"
     - ".bundle/**/*"
+    - "pkg/**/*"
     - "sorbet/rbi/**/*"
     - "spec/**/*"
+    - "tmp/**/*"
     - "vendor/**/*"
 
 Layout/LineLength:

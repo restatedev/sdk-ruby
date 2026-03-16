@@ -4,4 +4,6 @@
 --ignore=spec/
 --ignore=.bundle/
 --ignore=.gem/
+--ignore=tmp/
+--ignore=pkg/
 --ignore=vendor/

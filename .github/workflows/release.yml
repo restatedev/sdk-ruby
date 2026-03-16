@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify version matches tag
+        if: github.ref_type == 'tag'
         run: |
           version=$(grep -oP "VERSION\s*=\s*'\\K[^']+" lib/restate/version.rb)
           tag_version=${{ github.ref_name }}
@@ -61,19 +62,28 @@ jobs:
       pull-requests: write
       actions: read
 
-  native-gem:
+  ci-data:
     runs-on: ubuntu-latest
-    needs: [version-check, ci, integration]
+    outputs:
+      result: ${{ steps.fetch.outputs.result }}
+    steps:
+      - id: fetch
+        uses: oxidize-rb/actions/fetch-ci-data@v1
+        with:
+          supported-ruby-platforms: |
+            exclude:
+              - arm-linux
+              - x64-mingw32
+              - x64-mingw-ucrt
+
+  native-gem:
+    name: Build native gem (${{ matrix.ruby-platform }})
+    runs-on: ubuntu-latest
+    needs: [version-check, ci, integration, ci-data]
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - x86_64-linux
-          - aarch64-linux
-          - x86_64-linux-musl
-          - aarch64-linux-musl
-          - x86_64-darwin
-          - arm64-darwin
+        ruby-platform: ${{ fromJSON(needs.ci-data.outputs.result).supported-ruby-platforms }}
     steps:
       - uses: actions/checkout@v4
 
@@ -84,17 +94,17 @@ jobs:
           cargo-cache: true
           cache-version: v1
 
-      - uses: oxidize-rb/actions/cross-gem@v1
-        id: cross-gem
-        with:
-          platform: ${{ matrix.platform }}
-          ruby-versions: "3.1,3.2,3.3,3.4"
+      - name: Debug rake tasks
+        run: bundle exec rake --tasks | grep -i native || echo "No native tasks found"
+
+      - name: Cross-compile gem
+        run: bundle exec rb-sys-dock --platform ${{ matrix.ruby-platform }} --ruby-versions "${{ join(fromJSON(needs.ci-data.outputs.result).stable-ruby-versions, ',') }}" --mount-toolchains --build
 
       - name: Upload gem
         uses: actions/upload-artifact@v4
         with:
-          name: gem-${{ matrix.platform }}
-          path: ${{ steps.cross-gem.outputs.gem-path }}
+          name: gem-${{ matrix.ruby-platform }}
+          path: pkg/*-${{ matrix.ruby-platform }}.gem
           if-no-files-found: error
 
   source-gem:
@@ -119,6 +129,7 @@ jobs:
 
   release:
     name: Publish to RubyGems
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     needs: [native-gem, source-gem]
     environment: rubygems

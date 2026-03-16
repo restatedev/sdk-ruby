@@ -2,6 +2,8 @@
 
 require 'rb_sys/extensiontask'
 
+GEMSPEC = Gem::Specification.load('restate-sdk.gemspec')
+
 CROSS_PLATFORMS = %w[
   x86_64-linux
   aarch64-linux
@@ -11,7 +13,7 @@ CROSS_PLATFORMS = %w[
   arm64-darwin
 ].freeze
 
-RbSys::ExtensionTask.new('restate_internal') do |ext|
+RbSys::ExtensionTask.new('restate_internal', GEMSPEC) do |ext|
   ext.lib_dir = 'lib/restate'
   ext.cross_compile = true
   ext.cross_platform = CROSS_PLATFORMS
