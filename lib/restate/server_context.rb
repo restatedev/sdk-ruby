@@ -100,10 +100,14 @@ module Restate
     # Durably retrieves a state entry by name. Returns nil if unset.
     sig { override.params(name: String, serde: T.untyped).returns(T.untyped) }
     def get(name, serde: JsonSerde)
+      get_async(name, serde: serde).await
+    end
+
+    # Returns a DurableFuture for a state entry. Resolves to nil if unset.
+    sig { override.params(name: String, serde: T.untyped).returns(DurableFuture) }
+    def get_async(name, serde: JsonSerde)
       handle = @vm.sys_get_state(name)
-      poll_and_take(handle) do |raw|
-        raw.nil? ? nil : serde.deserialize(raw)
-      end
+      DurableFuture.new(self, handle, serde: serde)
     end
 
     # Durably sets a state entry. The value is serialized via +serde+.
@@ -127,8 +131,14 @@ module Restate
     # Returns the list of all state entry names for this virtual object or workflow.
     sig { override.returns(T.untyped) }
     def state_keys
+      state_keys_async.await
+    end
+
+    # Returns a DurableFuture for the list of all state entry names.
+    sig { override.returns(DurableFuture) }
+    def state_keys_async
       handle = @vm.sys_get_state_keys
-      poll_and_take(handle)
+      DurableFuture.new(self, handle)
     end
 
     # ── Sleep ──

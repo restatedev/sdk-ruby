@@ -210,10 +210,24 @@ ctx.clear_all                       # Delete all keys
 keys = ctx.state_keys               # List all key names
 ```
 
+**Async variants** — return a `DurableFuture` instead of blocking, useful for fan-out:
+
+```ruby
+future_a = ctx.get_async('key_a')
+future_b = ctx.get_async('key_b')
+keys_future = ctx.state_keys_async
+
+# Await results (fetches happen concurrently)
+val_a = future_a.await
+val_b = future_b.await
+keys = keys_future.await
+```
+
 Values are JSON-serialized by default. Pass `serde:` for custom serialization:
 
 ```ruby
 ctx.get('key', serde: Restate::BytesSerde)
+ctx.get_async('key', serde: Restate::BytesSerde)
 ctx.set('key', raw_bytes, serde: Restate::BytesSerde)
 ```
 
@@ -1008,10 +1022,12 @@ end
 ```ruby
 # State (VirtualObject / Workflow)
 ctx.get(name) → value | nil
+ctx.get_async(name) → DurableFuture
 ctx.set(name, value)
 ctx.clear(name)
 ctx.clear_all
 ctx.state_keys → Array[String]
+ctx.state_keys_async → DurableFuture
 
 # Durable execution
 ctx.run(name, background: false) { block } → DurableFuture

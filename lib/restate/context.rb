@@ -246,9 +246,17 @@ module Restate
     sig { abstract.params(name: String, serde: T.untyped).returns(T.untyped) }
     def get(name, serde: JsonSerde); end
 
+    # Durably retrieve a state entry, returning a DurableFuture instead of blocking.
+    sig { abstract.params(name: String, serde: T.untyped).returns(DurableFuture) }
+    def get_async(name, serde: JsonSerde); end
+
     # List all state entry names.
     sig { abstract.returns(T.untyped) }
     def state_keys; end
+
+    # List all state entry names, returning a DurableFuture instead of blocking.
+    sig { abstract.returns(DurableFuture) }
+    def state_keys_async; end
   end
 
   # Context interface for VirtualObject exclusive handlers (full state access).
