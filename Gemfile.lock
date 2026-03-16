@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    restate-sdk (0.2.0)
+    restate-sdk (0.2.1)
       async (~> 2.0)
       falcon (~> 0.47)
       rack (>= 2.0)
