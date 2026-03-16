@@ -76,6 +76,7 @@ jobs:
               - arm-linux
               - x64-mingw32
               - x64-mingw-ucrt
+              - aarch64-mingw-ucrt
           stable-ruby-versions: |
             exclude:
               - "4.0"
