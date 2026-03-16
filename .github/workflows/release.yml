@@ -76,6 +76,9 @@ jobs:
               - arm-linux
               - x64-mingw32
               - x64-mingw-ucrt
+          stable-ruby-versions: |
+            exclude:
+              - "4.0"
 
   native-gem:
     name: Build native gem (${{ matrix.ruby-platform }})
@@ -94,13 +97,6 @@ jobs:
           bundler-cache: true
           cargo-cache: true
           cache-version: v1
-
-      - name: Debug rake tasks (host)
-        run: bundle exec rake --tasks || true
-
-      - name: Debug rake tasks (inside container)
-        run: |
-          bundle exec rb-sys-dock --platform ${{ matrix.ruby-platform }} --mount-toolchains -- bash -c "bundle install && bundle exec rake --tasks" || true
 
       - name: Cross-compile gem
         run: bundle exec rb-sys-dock --platform ${{ matrix.ruby-platform }} --ruby-versions "${{ join(fromJSON(needs.ci-data.outputs.result).stable-ruby-versions, ',') }}" --mount-toolchains --build
