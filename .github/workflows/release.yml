@@ -23,6 +23,11 @@ jobs:
             echo "::error::version.rb version '${version}' != tag version '${tag_version}'. Please align them."
             exit 1
           fi
+          cargo_version=$(grep -oP '^version\s*=\s*"\K[^"]+' ext/restate_internal/Cargo.toml)
+          if [ "${tag_version}" != "${cargo_version}" ]; then
+            echo "::error::Cargo.toml version '${cargo_version}' != tag version '${tag_version}'. Please align them."
+            exit 1
+          fi
 
   native-gem:
     runs-on: ubuntu-latest
