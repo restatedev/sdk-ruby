@@ -23,33 +23,6 @@ module Restate
 
   module_function
 
-  # Create a new instance-based stateless Service.
-  #
-  # @param name [String] the service name
-  # @return [Service]
-  sig { params(name: String, opts: T.untyped).returns(Service) }
-  def service(name, **opts)
-    Service.new(name, **opts)
-  end
-
-  # Create a new instance-based VirtualObject.
-  #
-  # @param name [String] the virtual object name
-  # @return [VirtualObject]
-  sig { params(name: String, opts: T.untyped).returns(VirtualObject) }
-  def virtual_object(name, **opts)
-    VirtualObject.new(name, **opts)
-  end
-
-  # Create a new instance-based Workflow.
-  #
-  # @param name [String] the workflow name
-  # @return [Workflow]
-  sig { params(name: String, opts: T.untyped).returns(Workflow) }
-  def workflow(name, **opts)
-    Workflow.new(name, **opts)
-  end
-
   # Create an endpoint, optionally binding services.
   # Returns an Endpoint that can be further configured before calling +.app+.
   #

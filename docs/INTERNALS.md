@@ -39,7 +39,7 @@ The SDK is a Rack 3 application designed for Falcon. It wraps the shared Rust
 
 ```
 lib/
-├── restate.rb                       Factory methods: Restate.service/virtual_object/workflow/endpoint
+├── restate.rb                       Restate.endpoint, fiber-local context accessors
 └── restate/
     ├── context.rb                   Request = Struct.new(:id, :headers, :body)
     ├── discovery.rb                 Generates discovery JSON manifest
@@ -207,7 +207,7 @@ instance state should go through `ctx.get`/`ctx.set`.
 - `ServiceTag` = `Struct.new(:kind, :name, :description, :metadata)`
 - `HandlerIO` = `Struct.new(:accept, :content_type, :input_serde, :output_serde)` — schema lives
   on the serde objects (accessed via `input_serde.json_schema`), not as separate fields.
-- `Handler` = `Struct.new(:service_tag, :handler_io, :kind, :name, :callable, :arity)`
+- `Handler` = `Struct.new(:service_tag, :handler_io, :kind, :name, :callable, :arity, :enable_lazy_state, :description, :metadata, :inactivity_timeout, :abort_timeout, :journal_retention, :idempotency_retention, :workflow_completion_retention, :ingress_private, :invocation_retry_policy)`
 
 ### Durable Futures (`lib/restate/durable_future.rb`)
 

@@ -21,7 +21,7 @@ class Greeter < Restate::Service
   end
 end
 
-ENDPOINT = Restate.endpoint(Greeter)
+endpoint = Restate.endpoint(Greeter)
 ```
 
 ### 2. Create a Rackup File
@@ -29,7 +29,7 @@ ENDPOINT = Restate.endpoint(Greeter)
 ```ruby
 # config.ru
 require_relative 'greeter'
-run ENDPOINT.app
+run endpoint.app
 ```
 
 ### 3. Run with Falcon

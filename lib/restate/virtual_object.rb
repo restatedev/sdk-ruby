@@ -4,7 +4,7 @@
 module Restate
   # A keyed virtual object with durable state.
   #
-  # Class-based API (preferred):
+  # @example
   #   class Counter < Restate::VirtualObject
   #     handler def add(addend)
   #       ctx = Restate.current_object_context
@@ -18,17 +18,9 @@ module Restate
   #       ctx.get("count") || 0
   #     end
   #   end
-  #
-  # Instance-based API (legacy, still supported):
-  #   counter = Restate::VirtualObject.new("Counter")
-  #   counter.handler("add") do |ctx, value|
-  #     ...
-  #   end
   class VirtualObject
     extend T::Sig
     extend ServiceDSL
-
-    # -- Class-level DSL (for subclasses) --
 
     # Register an exclusive handler. Use as: +handler def my_method(arg)+
     #
@@ -61,63 +53,6 @@ module Restate
 
     def self._service_kind
       'object'
-    end
-
-    # -- Instance-based API (legacy) --
-
-    sig { returns(T.untyped) }
-    attr_reader :service_tag
-
-    sig { returns(T::Hash[String, T.untyped]) }
-    attr_reader :handlers
-
-    sig { params(name: String, description: T.nilable(String), metadata: T.untyped).void }
-    def initialize(name, description: nil, metadata: nil)
-      @service_tag = T.let(
-        ServiceTag.new(kind: 'object', name: name, description: description, metadata: metadata),
-        T.untyped
-      )
-      @handlers = T.let({}, T::Hash[String, T.untyped])
-    end
-
-    sig { returns(String) }
-    def name
-      @service_tag.name
-    end
-
-    # Returns the service name.
-    sig { returns(String) }
-    def service_name
-      name
-    end
-
-    # Register a handler on this instance-based virtual object.
-    #
-    # @param name [String] the handler name
-    # @param kind [Symbol] concurrency mode (+:exclusive+ or +:shared+)
-    # @param input [Class, #serialize, nil] type or serde for input deserialization
-    # @param output [Class, #serialize, nil] type or serde for output serialization
-    # @yield [input] the handler block (access context via Restate.current_object_context)
-    # @return [self]
-    def handler(name, kind: :exclusive, accept: 'application/json', content_type: 'application/json',
-                input: nil, output: nil, &block)
-      raise ArgumentError, 'handler requires a block' unless block
-
-      handler_io = HandlerIO.new(
-        accept: accept, content_type: content_type,
-        input_serde: Serde.resolve(input), output_serde: Serde.resolve(output)
-      )
-
-      h = Handler.new(
-        service_tag: @service_tag,
-        handler_io: handler_io,
-        kind: kind.to_s,
-        name: name,
-        callable: block,
-        arity: block.arity.abs
-      )
-      @handlers[name] = h
-      self
     end
   end
 end

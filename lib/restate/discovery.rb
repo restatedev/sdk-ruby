@@ -50,7 +50,7 @@ module Restate
       )
     end
 
-    sig { params(service: T.any(Service, VirtualObject, Workflow)).returns(T::Hash[Symbol, T.untyped]) }
+    sig { params(service: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
     def build_service(service) # rubocop:disable Metrics/AbcSize
       service_type = SERVICE_TYPES.fetch(service.service_tag.kind)
 
@@ -58,8 +58,7 @@ module Restate
         build_handler(handler)
       end
 
-      svc_name = service.respond_to?(:service_name) ? service.service_name : service.name
-      lazy_state = service.respond_to?(:lazy_state?) ? T.unsafe(service).lazy_state? : nil
+      svc_name = service.service_name
 
       result = compact(
         name: svc_name,
@@ -67,15 +66,15 @@ module Restate
         handlers: handlers,
         documentation: service.service_tag.description,
         metadata: service.service_tag.metadata,
-        enableLazyState: lazy_state,
-        inactivityTimeout: svc_accessor(service, :svc_inactivity_timeout),
-        abortTimeout: svc_accessor(service, :svc_abort_timeout),
-        journalRetention: svc_accessor(service, :svc_journal_retention),
-        idempotencyRetention: svc_accessor(service, :svc_idempotency_retention),
-        ingressPrivate: svc_accessor_raw(service, :svc_ingress_private)
+        enableLazyState: service.lazy_state?,
+        inactivityTimeout: seconds_to_ms(service.svc_inactivity_timeout),
+        abortTimeout: seconds_to_ms(service.svc_abort_timeout),
+        journalRetention: seconds_to_ms(service.svc_journal_retention),
+        idempotencyRetention: seconds_to_ms(service.svc_idempotency_retention),
+        ingressPrivate: service.svc_ingress_private
       )
 
-      policy = svc_accessor_raw(service, :svc_invocation_retry_policy)
+      policy = service.svc_invocation_retry_policy
       merge_retry_policy!(result, policy) if policy
 
       result
@@ -124,22 +123,6 @@ module Restate
       return nil if seconds.nil?
 
       (seconds * 1000).to_i
-    end
-
-    # Read an optional service-level accessor that returns a time value, converting to ms.
-    sig { params(service: T.untyped, method_name: Symbol).returns(T.nilable(Integer)) }
-    def svc_accessor(service, method_name)
-      return nil unless service.respond_to?(method_name)
-
-      seconds_to_ms(T.unsafe(service).public_send(method_name))
-    end
-
-    # Read an optional service-level accessor (raw value, no conversion).
-    sig { params(service: T.untyped, method_name: Symbol).returns(T.untyped) }
-    def svc_accessor_raw(service, method_name)
-      return nil unless service.respond_to?(method_name)
-
-      T.unsafe(service).public_send(method_name)
     end
 
     # Merge retry policy fields (flattened) into the target hash.

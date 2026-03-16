@@ -23,15 +23,14 @@ module Restate
     end
 
     # Bind one or more services to this endpoint.
-    # Accepts both class-based services (e.g. +Counter+) and instance-based.
     #
-    # @param svcs [Array<Class, Service, VirtualObject, Workflow>] services to bind
+    # @param svcs [Array<Class<Service>, Class<VirtualObject>, Class<Workflow>>] services to bind
     # @return [self]
     # @raise [ArgumentError] if a service with the same name is already bound
     sig { params(svcs: T.untyped).returns(T.self_type) }
     def bind(*svcs)
       svcs.each do |svc|
-        svc_name = svc.respond_to?(:service_name) ? svc.service_name : svc.name
+        svc_name = svc.service_name
         raise ArgumentError, "Service #{svc_name} already exists" if @services.key?(svc_name)
 
         @services[svc_name] = svc
