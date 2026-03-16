@@ -547,16 +547,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
-name = "restate-sdk-ruby-core"
-version = "0.1.0"
-dependencies = [
- "magnus",
- "rb-sys",
- "restate-sdk-shared-core",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "restate-sdk-shared-core"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -575,6 +565,16 @@ dependencies = [
  "strum",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "restate_internal"
+version = "0.1.0"
+dependencies = [
+ "magnus",
+ "rb-sys",
+ "restate-sdk-shared-core",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-require 'rake/extensiontask'
-require 'rspec/core/rake_task'
+require 'rb_sys/extensiontask'
 
 CROSS_PLATFORMS = %w[
   x86_64-linux
@@ -12,13 +11,16 @@ CROSS_PLATFORMS = %w[
   arm64-darwin
 ].freeze
 
-Rake::ExtensionTask.new('restate_internal') do |ext|
+RbSys::ExtensionTask.new('restate_internal') do |ext|
   ext.lib_dir = 'lib/restate'
-  ext.source_pattern = '*.{rs,toml}'
   ext.cross_compile = true
   ext.cross_platform = CROSS_PLATFORMS
 end
 
-RSpec::Core::RakeTask.new(:spec)
-
-task default: %i[compile spec]
+begin
+  require 'rspec/core/rake_task'
+  RSpec::Core::RakeTask.new(:spec)
+  task default: %i[compile spec]
+rescue LoadError
+  task default: %i[compile]
+end
