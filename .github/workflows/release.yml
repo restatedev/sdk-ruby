@@ -76,9 +76,6 @@ jobs:
               - x64-mingw32
               - x64-mingw-ucrt
               - aarch64-mingw-ucrt
-          stable-ruby-versions: |
-            exclude:
-              - "4.0"
 
   native-gem:
     name: Build native gem (${{ matrix.ruby-platform }})

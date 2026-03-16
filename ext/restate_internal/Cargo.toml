@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 doc = false
 
 [dependencies]
-magnus = { version = "0.7", features = ["rb-sys"] }
+magnus = { version = "0.8", features = ["rb-sys"] }
 rb-sys = { version = "0.9", features = ["stable-api-compiled-fallback"] }
 restate-sdk-shared-core = { version = "=0.7.0", features = ["request_identity", "sha2_random_seed"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
