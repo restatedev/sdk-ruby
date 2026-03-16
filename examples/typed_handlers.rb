@@ -37,13 +37,13 @@ end
 # Typed request/response structs
 # ──────────────────────────────────────────────
 
-class ReservationRequest < Dry::Struct # rubocop:disable Style/OneClassPerFile
+class ReservationRequest < Dry::Struct
   attribute :concert, Types::String
   attribute :num_tickets, Types::Integer
   attribute? :seat_preference, Types::String # optional attribute
 end
 
-class ReservationResponse < Dry::Struct # rubocop:disable Style/OneClassPerFile
+class ReservationResponse < Dry::Struct
   attribute :reservation_id, Types::String
   attribute :concert, Types::String
   attribute :num_tickets, Types::Integer
@@ -54,11 +54,11 @@ end
 # Service with typed handlers
 # ──────────────────────────────────────────────
 
-class TicketService < Restate::Service # rubocop:disable Style/OneClassPerFile
+class TicketService < Restate::Service
   # input: and output: accept type classes — the SDK auto-resolves
   # serde and JSON Schema from Dry::Struct definitions.
   handler :reserve, input: ReservationRequest, output: ReservationResponse
-  def reserve(request) # rubocop:disable Metrics/MethodLength
+  def reserve(request)
     ctx = Restate.current_context
     # request is a ReservationRequest instance, not a raw Hash
     reservation_id = ctx.run_sync('create-reservation') do

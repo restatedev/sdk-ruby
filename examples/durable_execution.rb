@@ -23,7 +23,7 @@
 require 'restate'
 
 class SubscriptionService < Restate::Service
-  handler def add(request) # rubocop:disable Metrics/MethodLength
+  handler def add(request)
     ctx = Restate.current_context
     user_id = request['user_id']
     plan = request['plan']

@@ -45,6 +45,7 @@ Metrics/ClassLength:
 
 Metrics/MethodLength:
   Exclude:
+    - "examples/**/*"
     - "lib/restate/discovery.rb"
     - "lib/restate/handler.rb"
     - "lib/restate/server.rb"
@@ -100,3 +101,8 @@ Style/ArgumentsForwarding:
 Lint/EmptyClass:
   Exclude:
     - "lib/restate/vm.rb"
+
+# Examples define multiple small classes per file for brevity
+Style/OneClassPerFile:
+  Exclude:
+    - "examples/**/*"

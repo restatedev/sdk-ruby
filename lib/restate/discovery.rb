@@ -4,7 +4,7 @@
 require 'json'
 
 module Restate
-  module Discovery
+  module Discovery # rubocop:disable Metrics/ModuleLength
     extend T::Sig
 
     PROTOCOL_MODES = T.let({
@@ -42,12 +42,12 @@ module Restate
 
       protocol_mode = PROTOCOL_MODES.fetch(endpoint.protocol || discovered_as)
 
-      compact({
-                protocolMode: protocol_mode,
-                minProtocolVersion: 5,
-                maxProtocolVersion: 5,
-                services: services
-              })
+      compact(
+        protocolMode: protocol_mode,
+        minProtocolVersion: 5,
+        maxProtocolVersion: 5,
+        services: services
+      )
     end
 
     sig { params(service: T.any(Service, VirtualObject, Workflow)).returns(T::Hash[Symbol, T.untyped]) }
@@ -60,14 +60,25 @@ module Restate
 
       svc_name = service.respond_to?(:service_name) ? service.service_name : service.name
       lazy_state = service.respond_to?(:lazy_state?) ? T.unsafe(service).lazy_state? : nil
-      compact({
-                name: svc_name,
-                ty: service_type,
-                handlers: handlers,
-                documentation: service.service_tag.description,
-                metadata: service.service_tag.metadata,
-                enableLazyState: lazy_state
-              })
+
+      result = compact(
+        name: svc_name,
+        ty: service_type,
+        handlers: handlers,
+        documentation: service.service_tag.description,
+        metadata: service.service_tag.metadata,
+        enableLazyState: lazy_state,
+        inactivityTimeout: svc_accessor(service, :svc_inactivity_timeout),
+        abortTimeout: svc_accessor(service, :svc_abort_timeout),
+        journalRetention: svc_accessor(service, :svc_journal_retention),
+        idempotencyRetention: svc_accessor(service, :svc_idempotency_retention),
+        ingressPrivate: svc_accessor_raw(service, :svc_ingress_private)
+      )
+
+      policy = svc_accessor_raw(service, :svc_invocation_retry_policy)
+      merge_retry_policy!(result, policy) if policy
+
+      result
     end
 
     sig { params(handler: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
@@ -86,22 +97,70 @@ module Restate
         jsonSchema: handler.handler_io.output_serde.json_schema
       }
 
-      compact({
-                name: handler.name,
-                ty: ty,
-                input: compact(input_payload),
-                output: compact(output_payload),
-                enableLazyState: handler.enable_lazy_state
-              })
+      result = compact(
+        name: handler.name,
+        ty: ty,
+        input: compact(**input_payload),
+        output: compact(**output_payload),
+        enableLazyState: handler.enable_lazy_state,
+        documentation: handler.description,
+        metadata: handler.metadata,
+        inactivityTimeout: seconds_to_ms(handler.inactivity_timeout),
+        abortTimeout: seconds_to_ms(handler.abort_timeout),
+        journalRetention: seconds_to_ms(handler.journal_retention),
+        idempotencyRetention: seconds_to_ms(handler.idempotency_retention),
+        workflowCompletionRetention: seconds_to_ms(handler.workflow_completion_retention),
+        ingressPrivate: handler.ingress_private
+      )
+
+      merge_retry_policy!(result, handler.invocation_retry_policy) if handler.invocation_retry_policy
+
+      result
+    end
+
+    # Convert seconds to milliseconds (integer). Returns nil if input is nil.
+    sig { params(seconds: T.nilable(Numeric)).returns(T.nilable(Integer)) }
+    def seconds_to_ms(seconds)
+      return nil if seconds.nil?
+
+      (seconds * 1000).to_i
+    end
+
+    # Read an optional service-level accessor that returns a time value, converting to ms.
+    sig { params(service: T.untyped, method_name: Symbol).returns(T.nilable(Integer)) }
+    def svc_accessor(service, method_name)
+      return nil unless service.respond_to?(method_name)
+
+      seconds_to_ms(T.unsafe(service).public_send(method_name))
+    end
+
+    # Read an optional service-level accessor (raw value, no conversion).
+    sig { params(service: T.untyped, method_name: Symbol).returns(T.untyped) }
+    def svc_accessor_raw(service, method_name)
+      return nil unless service.respond_to?(method_name)
+
+      T.unsafe(service).public_send(method_name)
+    end
+
+    # Merge retry policy fields (flattened) into the target hash.
+    sig { params(target: T::Hash[Symbol, T.untyped], policy: T.nilable(T::Hash[Symbol, T.untyped])).void }
+    def merge_retry_policy!(target, policy) # rubocop:disable Metrics/AbcSize,Metrics/CyclomaticComplexity
+      return if policy.nil? || policy.empty?
+
+      target[:retryPolicyInitialInterval] = seconds_to_ms(policy[:initial_interval]) if policy[:initial_interval]
+      target[:retryPolicyMaxInterval] = seconds_to_ms(policy[:max_interval]) if policy[:max_interval]
+      target[:retryPolicyMaxAttempts] = policy[:max_attempts] if policy[:max_attempts]
+      target[:retryPolicyExponentiationFactor] = policy[:exponentiation_factor] if policy[:exponentiation_factor]
+      target[:retryPolicyOnMaxAttempts] = policy[:on_max_attempts].to_s.upcase if policy[:on_max_attempts]
     end
 
     # Remove nil values from a hash (non-recursive for top level, recursive for nested).
-    sig { params(hash: T::Hash[Symbol, T.untyped]).returns(T::Hash[Symbol, T.untyped]) }
-    def compact(hash)
-      hash.each_with_object({}) do |(k, v), result|
+    sig { params(kwargs: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
+    def compact(**kwargs)
+      kwargs.each_with_object({}) do |(k, v), result|
         next if v.nil?
 
-        result[k] = v.is_a?(Hash) ? compact(v) : v
+        result[k] = v.is_a?(Hash) ? compact(**v) : v
       end
     end
   end

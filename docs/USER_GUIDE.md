@@ -479,6 +479,35 @@ The `input:` and `output:` options accept:
 2. A **serde object** (responds to `serialize`/`deserialize`) — used directly
 3. Omitted — defaults to `JsonSerde` with no schema
 
+Handlers also accept configuration options that control Restate server behavior:
+
+```ruby
+handler :process,
+  input: String, output: String,
+  description: 'Process a task',              # Human-readable description
+  metadata: { 'team' => 'backend' },          # Arbitrary key-value metadata
+  inactivity_timeout: 300,                    # Seconds before Restate considers handler inactive
+  abort_timeout: 60,                          # Seconds before Restate aborts a stuck handler
+  journal_retention: 86_400,                  # Seconds to retain the journal (1 day)
+  idempotency_retention: 3600,                # Seconds to retain idempotency keys (1 hour)
+  ingress_private: true,                      # Hide from public ingress
+  enable_lazy_state: true,                    # Fetch state on demand (VirtualObject/Workflow)
+  invocation_retry_policy: {                  # Custom retry policy
+    initial_interval: 0.1,                    #   First retry after 100ms
+    max_interval: 30,                         #   Cap retry interval at 30s
+    max_attempts: 10,                         #   Max 10 attempts
+    exponentiation_factor: 2.0,               #   Double interval each retry
+    on_max_attempts: :kill                     #   Kill invocation on exhaustion (:pause or :kill)
+  }
+```
+
+For workflow `main` handlers, there is an additional option:
+
+```ruby
+main :run,
+  workflow_completion_retention: 86_400       # Seconds to retain workflow completion (1 day)
+```
+
 ### Custom Service Name
 
 By default, the service name is the unqualified class name. Override it:
@@ -503,6 +532,64 @@ handler def with_input(data)      # data = deserialized JSON body
   data['name']
 end
 ```
+
+---
+
+## Service Configuration
+
+Use class-level DSL methods to set defaults for the entire service. These are reported to the
+Restate server via the discovery protocol and control server-side behavior.
+
+```ruby
+class OrderProcessor < Restate::VirtualObject
+  # Documentation
+  description 'Processes customer orders'
+  metadata 'team' => 'commerce', 'tier' => 'critical'
+
+  # Timeouts
+  inactivity_timeout 300          # Seconds before Restate considers a handler inactive
+  abort_timeout 60                # Seconds before Restate aborts a stuck handler
+
+  # Retention
+  journal_retention 86_400        # Seconds to retain the journal (1 day)
+  idempotency_retention 3600      # Seconds to retain idempotency keys (1 hour)
+
+  # Access control
+  ingress_private                 # Hide from public ingress
+
+  # State loading
+  enable_lazy_state               # Fetch state on demand instead of pre-loading
+
+  # Retry policy for handler invocations
+  invocation_retry_policy initial_interval: 0.1,
+                          max_interval: 30,
+                          max_attempts: 10,
+                          exponentiation_factor: 2.0,
+                          on_max_attempts: :kill
+
+  handler def process(order)
+    # ...
+  end
+end
+```
+
+All time values are in **seconds**. All options are optional — when omitted, the Restate server
+uses its built-in defaults.
+
+Handler-level options override service-level defaults for individual handlers.
+
+| Option | Service | Handler | Description |
+|--------|:---:|:---:|-------------|
+| `description` | yes | yes | Human-readable documentation |
+| `metadata` | yes | yes | Arbitrary key-value pairs |
+| `inactivity_timeout` | yes | yes | Seconds before handler is considered inactive |
+| `abort_timeout` | yes | yes | Seconds before a stuck handler is aborted |
+| `journal_retention` | yes | yes | Seconds to retain the invocation journal |
+| `idempotency_retention` | yes | yes | Seconds to retain idempotency keys |
+| `ingress_private` | yes | yes | Hide from public ingress |
+| `enable_lazy_state` | yes | yes | Fetch state on demand (VirtualObject/Workflow) |
+| `invocation_retry_policy` | yes | yes | Custom retry policy for handler invocations |
+| `workflow_completion_retention` | — | main only | Seconds to retain workflow completion |
 
 ---
 
@@ -977,6 +1064,7 @@ The `examples/` directory contains runnable examples:
 | `service_communication.rb` | Calls, sends, fan-out/fan-in, `wait_any`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 | `typed_handlers_sorbet.rb` | `input:`/`output:` with `T::Struct` (Sorbet), JSON Schema generation |
+| `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
 
 Run any example:
 ```bash

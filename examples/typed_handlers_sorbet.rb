@@ -36,7 +36,7 @@ class RegistrationRequest < T::Struct
   const :note, T.nilable(String)
 end
 
-class RegistrationResponse < T::Struct # rubocop:disable Style/OneClassPerFile
+class RegistrationResponse < T::Struct
   const :registration_id, String
   const :event_name, String
   const :attendee, String
@@ -48,13 +48,12 @@ end
 # Service with typed handlers
 # ──────────────────────────────────────────────
 
-class EventService < Restate::Service # rubocop:disable Style/OneClassPerFile
+class EventService < Restate::Service
   # input: and output: accept type classes — the SDK auto-resolves
   # serde and JSON Schema from T::Struct definitions.
   handler :register, input: RegistrationRequest, output: RegistrationResponse
-  def register(request) # rubocop:disable Metrics/MethodLength
+  def register(request)
     ctx = Restate.current_context
-
     # request is a RegistrationRequest instance, not a raw Hash
     registration_id = ctx.run_sync('create-registration') do
       "reg_#{request.event_name}_#{rand(10_000)}"

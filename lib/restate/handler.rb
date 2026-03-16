@@ -18,6 +18,12 @@ module Restate
   Handler = Struct.new(
     :service_tag, :handler_io, :kind, :name, :callable, :arity,
     :enable_lazy_state,
+    :description, :metadata,
+    :inactivity_timeout, :abort_timeout,
+    :journal_retention, :idempotency_retention,
+    :workflow_completion_retention,
+    :ingress_private,
+    :invocation_retry_policy,
     keyword_init: true
   )
 

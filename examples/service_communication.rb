@@ -40,8 +40,8 @@ class Worker < Restate::Service
   end
 end
 
-class FanOut < Restate::Service # rubocop:disable Style/OneClassPerFile
-  # Fan-out: dispatch tasks in parallel, collect all results.
+# Fan-out: dispatch tasks in parallel, collect all results.
+class FanOut < Restate::Service
   handler def run(tasks)
     ctx = Restate.current_context
     # Launch a call for each task
