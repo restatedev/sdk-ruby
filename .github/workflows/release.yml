@@ -95,8 +95,12 @@ jobs:
           cargo-cache: true
           cache-version: v1
 
-      - name: Debug rake tasks
-        run: bundle exec rake --tasks | grep -i native || echo "No native tasks found"
+      - name: Debug rake tasks (host)
+        run: bundle exec rake --tasks || true
+
+      - name: Debug rake tasks (inside container)
+        run: |
+          bundle exec rb-sys-dock --platform ${{ matrix.ruby-platform }} --mount-toolchains -- bash -c "bundle install && bundle exec rake --tasks" || true
 
       - name: Cross-compile gem
         run: bundle exec rb-sys-dock --platform ${{ matrix.ruby-platform }} --ruby-versions "${{ join(fromJSON(needs.ci-data.outputs.result).stable-ruby-versions, ',') }}" --mount-toolchains --build
