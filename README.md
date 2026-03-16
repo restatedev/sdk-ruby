@@ -114,3 +114,20 @@ Run integration tests (requires Docker + Java 21+):
 ```shell
 make test-integration
 ```
+
+## Releasing the package
+
+Pull latest main:
+
+```shell
+git checkout main && git pull
+```
+
+Update the version in `lib/restate/version.rb`, commit it. Then push a tag:
+
+```shell
+git tag -m "Release v0.1.0" v0.1.0
+git push origin v0.1.0
+```
+
+The [release workflow](.github/workflows/release.yml) will build pre-compiled native gems for all platforms (x86_64/aarch64 Linux, macOS, musl) and publish them to RubyGems.
