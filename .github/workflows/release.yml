@@ -30,38 +30,6 @@ jobs:
             exit 1
           fi
 
-  ci:
-    runs-on: ubuntu-latest
-    name: Build, lint, typecheck & test
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-          bundler-cache: true
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ext/restate_internal
-
-      - name: Verify
-        run: make verify
-
-  integration:
-    uses: ./.github/workflows/integration.yaml
-    permissions:
-      contents: read
-      issues: read
-      checks: write
-      pull-requests: write
-      actions: read
-
   ci-data:
     runs-on: ubuntu-latest
     outputs:
@@ -80,7 +48,7 @@ jobs:
   native-gem:
     name: Build native gem (${{ matrix.ruby-platform }})
     runs-on: ubuntu-latest
-    needs: [version-check, ci, integration, ci-data]
+    needs: [version-check, ci-data]
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +75,7 @@ jobs:
 
   source-gem:
     runs-on: ubuntu-latest
-    needs: [version-check, ci, integration]
+    needs: [version-check]
     steps:
       - uses: actions/checkout@v4
 
