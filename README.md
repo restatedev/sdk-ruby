@@ -117,17 +117,29 @@ make test-integration
 
 ## Releasing the package
 
-Pull latest main:
+1. Pull latest main:
 
-```shell
-git checkout main && git pull
-```
+    ```shell
+    git checkout main && git pull
+    ```
 
-Update the version in `lib/restate/version.rb`, commit it. Then push a tag:
+2. Bump the version in **both** files:
+    - `lib/restate/version.rb` — e.g. `VERSION = '0.5.0'`
+    - `ext/restate_internal/Cargo.toml` — e.g. `version = "0.5.0"`
 
-```shell
-git tag -m "Release v0.1.0" v0.1.0
-git push origin v0.1.0
-```
+3. Update the lock file and verify:
 
-The [release workflow](.github/workflows/release.yml) will build pre-compiled native gems for all platforms (x86_64/aarch64 Linux, macOS, musl) and publish them to RubyGems.
+    ```shell
+    make build
+    ```
+
+4. Commit, tag, and push:
+
+    ```shell
+    git add -A
+    git commit -m "Release v0.5.0"
+    git tag -m "Release v0.5.0" v0.5.0
+    git push origin main v0.5.0
+    ```
+
+The [release workflow](.github/workflows/release.yml) will build pre-compiled native gems for all platforms (x86_64/aarch64 Linux, macOS, musl) and publish them to [RubyGems](https://rubygems.org/gems/restate-sdk).
