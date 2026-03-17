@@ -1,7 +1,15 @@
 # typed: true
 # frozen_string_literal: true
 
-require_relative 'restate_internal'
+begin
+  # Cross-compiled native gems place the binary in a version-specific directory
+  # e.g., lib/restate/3.3/restate_internal.bundle
+  RUBY_VERSION =~ /(\d+\.\d+)/
+  require_relative "#{Regexp.last_match(1)}/restate_internal"
+rescue LoadError
+  # Fall back to the default location (development builds, source gem installs)
+  require_relative 'restate_internal'
+end
 
 module Restate
   # Ruby-side data types for VM results
