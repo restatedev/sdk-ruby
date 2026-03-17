@@ -133,6 +133,7 @@ jobs:
     environment: rubygems
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -147,11 +148,12 @@ jobs:
         with:
           ruby-version: "3.3"
 
+      - name: Configure trusted publisher credentials
+        uses: rubygems/configure-rubygems-credentials@v1
+
       - name: Publish to RubyGems
-        env:
-          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
         run: |
           for gem in gems/*.gem; do
             echo "Publishing ${gem}..."
-            gem push "${gem}" || true
+            gem push "${gem}"
           done
