@@ -2,5 +2,6 @@
 
 source 'https://rubygems.org'
 
+gem 'falcon', '~> 0.47'
 gem 'restate-sdk'
 gem 'sorbet-runtime'

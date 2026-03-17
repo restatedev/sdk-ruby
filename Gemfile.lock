@@ -3,7 +3,6 @@ PATH
   specs:
     restate-sdk (0.4.3)
       async (~> 2.0)
-      falcon (~> 0.47)
       rack (>= 2.0)
       sorbet-runtime
 
@@ -232,6 +231,7 @@ PLATFORMS
 DEPENDENCIES
   base64
   dry-struct
+  falcon (~> 0.47)
   rake (~> 13.0)
   rake-compiler (~> 1.2)
   rb_sys (~> 0.9)

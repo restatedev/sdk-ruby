@@ -24,7 +24,6 @@ Gem::Specification.new do |spec|
   spec.extensions = ['ext/restate_internal/extconf.rb']
 
   spec.add_dependency 'async', '~> 2.0'
-  spec.add_dependency 'falcon', '~> 0.47'
   spec.add_dependency 'rack', '>= 2.0'
   spec.add_dependency 'sorbet-runtime'
   spec.metadata['rubygems_mfa_required'] = 'true'
