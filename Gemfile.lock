@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    restate-sdk (0.4.3)
+    restate-sdk (0.4.4)
       async (~> 2.0)
       rack (>= 2.0)
       sorbet-runtime
