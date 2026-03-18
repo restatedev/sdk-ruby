@@ -1,5 +1,0 @@
---dir
-.
---ignore=.bundle/
---ignore=tmp/
---ignore=vendor/

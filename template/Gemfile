@@ -4,10 +4,7 @@ source 'https://rubygems.org'
 
 gem 'falcon', '~> 0.47'
 gem 'restate-sdk'
-gem 'sorbet-runtime'
 
 group :development do
   gem 'rubocop', require: false
-  gem 'sorbet', require: false
-  gem 'tapioca', require: false
 end

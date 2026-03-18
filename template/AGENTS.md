@@ -12,7 +12,7 @@ Handlers survive crashes, retries, and infrastructure failures — with the simp
 - `config.ru` — Rack entry point, binds services to a Restate endpoint
 - `greeter.rb` — Example service (add your own service files alongside it)
 - `Gemfile` — Dependencies
-- `Makefile` — `make verify` runs tapioca + lint + typecheck
+- `Makefile` — `make lint` for linting
 
 ## Running
 
@@ -136,11 +136,6 @@ raise Restate::TerminalError.new('not found', status_code: 404)
 endpoint = Restate.endpoint(ServiceA, ServiceB)
 run endpoint.app   # in config.ru
 ```
-
-## Verification
-
-Always run `make verify` after changes. This runs tapioca (type generation), rubocop (lint),
-and sorbet (typecheck).
 
 ## Code style
 

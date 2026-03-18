@@ -9,8 +9,6 @@ A minimal template for building [Restate](https://restate.dev/) services in Ruby
 
 ## Getting started
 
-Install dependencies:
-
 ```shell
 bundle install
 ```
@@ -35,28 +33,15 @@ curl localhost:8080/Greeter/greet \
   -d '{"name": "World"}'
 ```
 
-## Verification
+## IDE Support
 
-Run the full verification suite (generate types, lint, typecheck):
+The SDK works out of the box with [Ruby LSP](https://github.com/Shopify/ruby-lsp) in VSCode.
+Install the **Ruby LSP** extension and you'll get code completion, hover docs, and
+go-to-definition for all Restate types — no extra setup needed.
 
-```shell
-make verify
-```
-
-Individual targets:
+## Linting
 
 ```shell
-make tapioca    # Generate typed handler signatures
 make lint       # Run Rubocop
-make typecheck  # Run Sorbet type checker
-make lint-fix   # Auto-fix lint offenses
+make lint-fix   # Auto-fix offenses
 ```
-
-## IDE Code Completion
-
-The SDK ships a [Tapioca](https://github.com/Shopify/tapioca) DSL compiler that generates
-[Sorbet](https://sorbet.org/) type signatures for your handlers — giving your IDE full code
-completion for `ctx` and typed input/output parameters with zero annotations in your code.
-
-Run `make tapioca` (or `bundle exec tapioca dsl`) whenever you add or rename handlers.
-Commit the generated `sorbet/rbi/dsl/` files to version control so the whole team benefits.
