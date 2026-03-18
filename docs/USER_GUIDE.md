@@ -812,17 +812,42 @@ end
 
 ---
 
-## IDE Code Completion (Optional)
+## IDE Code Completion
 
-The SDK ships a [Tapioca](https://github.com/Shopify/tapioca) DSL compiler that gives your IDE
-full code completion for handler methods — with zero annotations in your code.
+### Ruby LSP (Recommended)
 
-The compiler generates [Sorbet](https://sorbet.org/) type signatures for handler input parameters
-and return types.
+The SDK works out of the box with [Ruby LSP](https://github.com/Shopify/ruby-lsp) in VSCode.
+Install the **Ruby LSP** extension and you'll get code completion, hover docs, and
+go-to-definition for all Restate types — no extra setup needed.
 
-### Setup
+Add YARD `@param` tags to your handlers for full context completion:
 
-**1. Add Sorbet and Tapioca to your Gemfile** (skip if you already use them):
+```ruby
+class Greeter < Restate::Service
+  # @param ctx [Restate::Context]
+  handler def greet(ctx, name)
+    ctx.run_sync('step') { "Hello, #{name}!" }
+  end
+end
+```
+
+Context types by service type:
+
+| Service type | Handler kind | Context type |
+|---|---|---|
+| `Service` | `handler` | `Restate::Context` |
+| `VirtualObject` | `handler` (exclusive) | `Restate::ObjectContext` |
+| `VirtualObject` | `shared` | `Restate::ObjectSharedContext` |
+| `Workflow` | `main` | `Restate::WorkflowContext` |
+| `Workflow` | `handler` (shared) | `Restate::WorkflowSharedContext` |
+
+### Sorbet + Tapioca (Optional)
+
+For full static type checking, the SDK ships RBI files inside the gem and a
+[Tapioca](https://github.com/Shopify/tapioca) DSL compiler that generates typed handler
+signatures.
+
+**1. Add Sorbet and Tapioca to your Gemfile:**
 
 ```ruby
 group :development do
@@ -831,20 +856,15 @@ group :development do
 end
 ```
 
-**2. Install and initialize** (one-time):
+**2. Generate type information:**
 
 ```bash
 bundle install
-bundle exec tapioca init
+bundle exec tapioca gems    # Generate RBI for all gems (one-time)
+bundle exec tapioca dsl     # Generate typed handler signatures
 ```
 
-**3. Generate the handler type signatures:**
-
-```bash
-bundle exec tapioca dsl
-```
-
-This creates RBI files under `sorbet/rbi/dsl/` — one per service class. For example, given:
+This creates RBI files under `sorbet/rbi/`. For example, given:
 
 ```ruby
 class Counter < Restate::VirtualObject
@@ -872,33 +892,8 @@ class Counter
 end
 ```
 
-Your IDE now offers completion for handler parameters and return types.
-
-### Re-generate after changes
-
-Run `tapioca dsl` again whenever you add or rename handlers:
-
-```bash
-bundle exec tapioca dsl
-```
-
-Commit the generated `sorbet/rbi/dsl/` files to version control so the whole team benefits.
-
-### Without Sorbet
-
-If you don't use Sorbet, you can still get completion in YARD-aware editors (Solargraph, RubyMine)
-by adding type annotations to the context accessor:
-
-```ruby
-class Greeter < Restate::Service
-  handler def greet(ctx, name)
-    ctx.run_sync('step') { "Hello, #{name}!" }
-  end
-end
-```
-
-Use `Restate::Context`, `Restate::ObjectContext`, or `Restate::WorkflowContext` depending on
-the service type.
+Run `tapioca dsl` again whenever you add or rename handlers. Commit the generated
+`sorbet/rbi/` files to version control so the whole team benefits.
 
 ---
 

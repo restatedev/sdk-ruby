@@ -23,6 +23,7 @@
 require 'restate'
 
 class SubscriptionService < Restate::Service
+  # @param ctx [Restate::Context]
   handler def add(ctx, request)
     user_id = request['user_id']
     plan = request['plan']

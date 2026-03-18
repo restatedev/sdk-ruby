@@ -9,3 +9,4 @@
 --ignore=vendor/
 --ignore=template/
 --ignore=test-services/
+--ignore=/rbi/

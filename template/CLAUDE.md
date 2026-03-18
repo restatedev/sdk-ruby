@@ -12,7 +12,6 @@ Handlers survive crashes, retries, and infrastructure failures — with the simp
 - `config.ru` — Rack entry point, binds services to a Restate endpoint
 - `greeter.rb` — Example service (add your own service files alongside it)
 - `Gemfile` — Dependencies
-- `Makefile` — `make lint` for linting
 
 ## Running
 

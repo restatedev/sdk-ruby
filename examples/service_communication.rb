@@ -24,6 +24,7 @@ require 'restate'
 
 # A simple worker that simulates processing a task.
 class Worker < Restate::Service
+  # @param ctx [Restate::Context]
   handler def process(ctx, task)
     ctx.run_sync('do-work') do
       { 'task' => task, 'result' => "completed_#{task}" }
@@ -33,6 +34,7 @@ end
 
 # Fan-out: dispatch tasks in parallel, collect all results.
 class FanOut < Restate::Service
+  # @param ctx [Restate::Context]
   handler def run(ctx, tasks)
     # Launch a call for each task
     futures = tasks.map do |task|
@@ -49,6 +51,7 @@ class FanOut < Restate::Service
   end
 
   # Race two calls and return the first result.
+  # @param ctx [Restate::Context]
   handler def race(ctx, tasks)
     futures = tasks.map do |task|
       ctx.service_call(Worker, :process, task)
@@ -60,6 +63,7 @@ class FanOut < Restate::Service
   end
 
   # Awakeable: pause until an external system resolves the callback.
+  # @param ctx [Restate::Context]
   handler def with_callback(ctx, task)
     awakeable_id, future = ctx.awakeable
 

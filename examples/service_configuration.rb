@@ -59,6 +59,9 @@ class OrderProcessor < Restate::VirtualObject
   # ── Handlers ──
 
   handler :submit, input: OrderRequest, output: OrderStatus
+  # @param ctx [Restate::ObjectContext]
+  # @param request [OrderRequest]
+  # @return [OrderStatus]
   def submit(ctx, request)
     order_id = ctx.run_sync('create-order') do
       "order_#{request.item}_#{rand(10_000)}"
@@ -79,6 +82,8 @@ class OrderProcessor < Restate::VirtualObject
   # Per-handler override: this read-only handler doesn't need lazy state
   # and should be accessible from the public ingress.
   shared :status, output: OrderStatus, enable_lazy_state: false
+  # @param ctx [Restate::ObjectSharedContext]
+  # @return [OrderStatus]
   def status(ctx)
     OrderStatus.new(
       order_id: ctx.key,

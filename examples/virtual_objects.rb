@@ -26,6 +26,7 @@ require 'restate'
 class Counter < Restate::VirtualObject
   # Exclusive handler — only one runs at a time per key.
   # Safe to read-modify-write without races.
+  # @param ctx [Restate::ObjectContext]
   handler def add(ctx, addend)
     current = ctx.get('count') || 0
     updated = current + addend
@@ -35,17 +36,20 @@ class Counter < Restate::VirtualObject
 
   # Shared handler — concurrent access allowed.
   # Great for reads that don't mutate state.
+  # @param ctx [Restate::ObjectSharedContext]
   shared def get(ctx)
     ctx.get('count') || 0
   end
 
   # Exclusive handler — clears a single state key.
+  # @param ctx [Restate::ObjectContext]
   handler def reset(ctx)
     ctx.clear('count')
     'counter reset'
   end
 
   # Exclusive handler — lists all keys then wipes everything.
+  # @param ctx [Restate::ObjectContext]
   handler def reset_all(ctx)
     keys = ctx.state_keys
     ctx.clear_all

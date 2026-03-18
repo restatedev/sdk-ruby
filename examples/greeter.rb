@@ -19,6 +19,9 @@ require 'restate'
 
 class Greeter < Restate::Service
   handler :greet, input: String, output: String
+  # @param ctx [Restate::Context]
+  # @param name [String]
+  # @return [String]
   def greet(ctx, name)
     # run_sync: durable side effect, returns the value directly
     ctx.run_sync('build-greeting') { "Hello, #{name}!" }

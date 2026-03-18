@@ -52,6 +52,9 @@ class EventService < Restate::Service
   # input: and output: accept type classes — the SDK auto-resolves
   # serde and JSON Schema from T::Struct definitions.
   handler :register, input: RegistrationRequest, output: RegistrationResponse
+  # @param ctx [Restate::Context]
+  # @param request [RegistrationRequest]
+  # @return [RegistrationResponse]
   def register(ctx, request)
     # request is a RegistrationRequest instance, not a raw Hash
     registration_id = ctx.run_sync('create-registration') do
@@ -76,6 +79,9 @@ class EventService < Restate::Service
 
   # Primitive types also generate JSON Schema for discovery
   handler :lookup, input: String, output: String
+  # @param _ctx [Restate::Context]
+  # @param registration_id [String]
+  # @return [String]
   def lookup(_ctx, registration_id)
     "status for #{registration_id}: confirmed"
   end

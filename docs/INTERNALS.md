@@ -56,6 +56,11 @@ lib/
     ├── testing.rb                   Test harness (opt-in: require 'restate/testing')
     ├── vm.rb                        VMWrapper — Ruby bridge to native VM
     └── workflow.rb                  Workflow class + main/handler DSL
+lib/tapioca/dsl/compilers/
+└── restate.rb                       Tapioca DSL compiler — generates typed handler sigs
+
+rbi/
+└── restate-sdk.rbi                  Shipped RBI — Tapioca auto-discovers via `tapioca gems`
 
 ext/restate_internal/
 ├── Cargo.toml                       Depends on restate-sdk-shared-core 0.7.0, magnus 0.7
@@ -65,12 +70,12 @@ spec/
 ├── spec_helper.rb                   Minimal RSpec config
 └── harness_spec.rb                  Integration tests using Restate::Testing harness
 
-test-services/                       Integration test services (for sdk-test-suite)
+test-services/                       Integration test services (for sdk-test-suite + verification)
 ├── Dockerfile                       Multi-stage: build native ext → run Falcon
 ├── config.ru                        Rack entry point
 ├── services.rb                      Service registry + SERVICES env filter
 ├── exclusions.yaml                  Test suite exclusions (currently empty — all tests pass)
-└── services/                        12 test service files (see Test Services section)
+└── services/                        Test service files (see Test Services section)
 
 examples/                            Runnable examples showcasing SDK features
 ├── config.ru                        Rackup: loads and serves all examples
@@ -79,6 +84,7 @@ examples/                            Runnable examples showcasing SDK features
 ├── virtual_objects.rb               State ops, handler vs shared
 ├── workflow.rb                      Promises, signals, workflow state
 ├── service_communication.rb         Calls, sends, fan-out, wait_any, awakeables
+├── service_configuration.rb         Service-level config: timeouts, retention, retry policy
 ├── typed_handlers.rb               Dry::Struct input/output, JSON Schema generation
 └── typed_handlers_sorbet.rb        T::Struct (Sorbet) input/output, JSON Schema generation
 ```
@@ -551,6 +557,24 @@ The `test-services/` directory contains integration test services designed to ru
 | KillTestSingleton | VirtualObject | recursiveCall, isUnlocked |
 | BlockAndWaitWorkflow | Workflow | run (main), unblock, getState |
 | VirtualObjectCommandInterpreter | VirtualObject | interpretCommands, getResults, hasAwakeable, resolveAwakeable, rejectAwakeable |
+| ServiceInterpreterHelper | Service | ping, echo, echoLater, terminalFailure, incrementIndirectly, resolveAwakeable, rejectAwakeable, incrementViaAwakeableDance |
+| ObjectInterpreterL0/L1/L2 | VirtualObject | interpret (19 command types), counter (shared) |
+
+### Interpreter Services (`services/interpreter.rb`)
+
+The interpreter services implement a programmable test harness used by the
+[e2e-verification-runner](https://github.com/restatedev/e2e-verification-runner). The driver
+sends random programs (sequences of commands) to the interpreter, which executes them against
+the Restate runtime. After all programs complete, the driver verifies that the state converges
+to the expected values.
+
+**ServiceInterpreterHelper** is a stateless service that provides helper operations (echo, sleep,
+awakeable resolution, indirect counter increments) called by the interpreter layers.
+
+**ObjectInterpreterL0/L1/L2** are three identical virtual object layers that interpret programs
+of 19 command types: state operations, sleep, service calls, side effects, awakeables,
+cross-layer calls, and error recovery. Multiple layers enable testing nested service-to-service
+calls.
 
 ### Test Suite Exclusions
 
@@ -567,6 +591,25 @@ Currently `exclusions.yaml` has no exclusions — all test suites pass with no s
 ```
 
 Requires Docker and Java 21+. The test JAR is cached in `tmp/`.
+
+### Running Verification Tests
+
+The verification runner sends random programs to the interpreter services and checks state
+convergence. This is a more thorough correctness check than the sdk-test-suite.
+
+```bash
+# Full run (builds Docker image, pulls driver, runs verification)
+./etc/run-verification.sh
+
+# Skip Docker build (reuse existing image)
+./etc/run-verification.sh --skip-build
+```
+
+Configuration in `etc/verification/`:
+- `env.json` — Container definitions (3 Restate nodes, 4 service containers)
+- `params.json` — Test parameters (keys, tests, program size)
+
+Requires Docker only.
 
 ### Harness Tests (`spec/harness_spec.rb`)
 

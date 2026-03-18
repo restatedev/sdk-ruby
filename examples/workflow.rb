@@ -34,6 +34,7 @@
 require 'restate'
 
 class UserSignup < Restate::Workflow
+  # @param ctx [Restate::WorkflowContext]
   main def run(ctx, email)
     user_id = ctx.run_sync('create-account') do
       "user_#{email.gsub(/[^a-zA-Z0-9]/, '_')}"
@@ -53,12 +54,14 @@ class UserSignup < Restate::Workflow
   end
 
   # Signal handler — delivers the approval value to the waiting workflow.
+  # @param ctx [Restate::WorkflowSharedContext]
   handler def approve(ctx, reason)
     ctx.resolve_promise('approval', reason)
     'approval sent'
   end
 
   # Query handler — returns current workflow status.
+  # @param ctx [Restate::WorkflowSharedContext]
   handler def status(ctx)
     ctx.get('status') || 'unknown'
   end

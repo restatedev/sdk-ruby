@@ -38,10 +38,3 @@ curl localhost:8080/Greeter/greet \
 The SDK works out of the box with [Ruby LSP](https://github.com/Shopify/ruby-lsp) in VSCode.
 Install the **Ruby LSP** extension and you'll get code completion, hover docs, and
 go-to-definition for all Restate types — no extra setup needed.
-
-## Linting
-
-```shell
-make lint       # Run Rubocop
-make lint-fix   # Auto-fix offenses
-```
