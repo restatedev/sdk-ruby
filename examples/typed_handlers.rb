@@ -58,8 +58,7 @@ class TicketService < Restate::Service
   # input: and output: accept type classes — the SDK auto-resolves
   # serde and JSON Schema from Dry::Struct definitions.
   handler :reserve, input: ReservationRequest, output: ReservationResponse
-  def reserve(request)
-    ctx = Restate.current_context
+  def reserve(ctx, request)
     # request is a ReservationRequest instance, not a raw Hash
     reservation_id = ctx.run_sync('create-reservation') do
       "res_#{request.concert}_#{rand(10_000)}"
@@ -82,7 +81,7 @@ class TicketService < Restate::Service
 
   # Primitive types also generate JSON Schema for discovery
   handler :lookup, input: String, output: String
-  def lookup(reservation_id)
+  def lookup(_ctx, reservation_id)
     "status for #{reservation_id}: confirmed"
   end
 end

@@ -7,3 +7,5 @@
 --ignore=tmp/
 --ignore=pkg/
 --ignore=vendor/
+--ignore=template/
+--ignore=test-services/

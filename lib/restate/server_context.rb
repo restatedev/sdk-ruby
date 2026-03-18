@@ -48,7 +48,7 @@ module Restate
       Thread.current[:restate_service_kind] = @handler.service_tag.kind
       Thread.current[:restate_handler_kind] = @handler.kind
       in_buffer = @invocation.input_buffer
-      out_buffer = Restate.invoke_handler(handler: @handler, in_buffer: in_buffer)
+      out_buffer = Restate.invoke_handler(handler: @handler, ctx: self, in_buffer: in_buffer)
       @vm.sys_write_output_success(out_buffer.b)
       @vm.sys_end
     rescue TerminalError => e

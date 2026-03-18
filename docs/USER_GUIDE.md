@@ -15,8 +15,7 @@ of ordinary Ruby code.
 require 'restate'
 
 class Greeter < Restate::Service
-  handler def greet(name)
-    ctx = Restate.current_context
+  handler def greet(ctx, name)
     ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   end
 end
@@ -58,8 +57,8 @@ Stateless handlers that can be invoked by name. Each invocation is independent.
 
 ```ruby
 class MyService < Restate::Service
-  handler def my_handler(input)
-    # input is the deserialized JSON body
+  handler def my_handler(ctx, input)
+    # ctx is the Restate context; input is the deserialized JSON body
     # return value is serialized as the JSON response
     { 'result' => input }
   end
@@ -75,16 +74,14 @@ Each virtual object instance is identified by a key and has durable K/V state sc
 ```ruby
 class Counter < Restate::VirtualObject
   # Exclusive handler — one invocation at a time per key.
-  handler def add(amount)
-    ctx = Restate.current_object_context
+  handler def add(ctx, amount)
     current = ctx.get('count') || 0
     ctx.set('count', current + amount)
     current + amount
   end
 
   # Shared handler — concurrent access allowed (read-only).
-  shared def get
-    ctx = Restate.current_object_context
+  shared def get(ctx)
     ctx.get('count') || 0
   end
 end
@@ -99,8 +96,7 @@ query state and send signals.
 
 ```ruby
 class UserSignup < Restate::Workflow
-  main def run(email)
-    ctx = Restate.current_workflow_context
+  main def run(ctx, email)
     user_id = ctx.run_sync('create-account') { create_user(email) }
     ctx.set('status', 'waiting_for_approval')
 
@@ -110,13 +106,11 @@ class UserSignup < Restate::Workflow
     { 'user_id' => user_id, 'approval' => approval }
   end
 
-  handler def approve(reason)
-    ctx = Restate.current_workflow_context
+  handler def approve(ctx, reason)
     ctx.resolve_promise('approval', reason)
   end
 
-  handler def status
-    ctx = Restate.current_workflow_context
+  handler def status(ctx)
     ctx.get('status') || 'unknown'
   end
 end
@@ -133,13 +127,13 @@ curl localhost:8080/UserSignup/user42/status -d 'null'
 
 ## Context API Reference
 
-The context object provides access to all Restate operations. Obtain it at the start of your
-handler using the appropriate fiber-local accessor:
+The context object provides access to all Restate operations. It is passed as the first argument
+to every handler:
 
 ```ruby
-ctx = Restate.current_context                  # Service handlers
-ctx = Restate.current_object_context           # VirtualObject handlers
-ctx = Restate.current_workflow_context         # Workflow handlers
+handler def greet(ctx, name)      # ctx is always the first parameter
+  ctx.run_sync('step') { ... }
+end
 ```
 
 All operations that interact with Restate return durable results — if the handler crashes and
@@ -390,14 +384,12 @@ event.wait    # Blocks the current fiber until the attempt finishes
 
 ### Accessing the Context
 
-Handlers obtain the Restate context via fiber-local accessors. This is the standard way to
-access the context — call the appropriate accessor at the start of your handler (or from any
-method within the same fiber):
+The context is passed as the first argument to every handler. For nested helper methods that
+don't have `ctx` in scope, you can use the fiber-local accessors:
 
 ```ruby
 class OrderService < Restate::Service
-  handler def process(order)
-    ctx = Restate.current_context
+  handler def process(ctx, order)
     validate(order)
     fulfill(order)
   end
@@ -405,7 +397,7 @@ class OrderService < Restate::Service
   private
 
   def validate(order)
-    # Works from any method within the handler's fiber
+    # Fiber-local accessor — works from any method within the handler's fiber
     ctx = Restate.current_context
     ctx.run_sync('validate') { check_inventory(order) }
   end
@@ -417,7 +409,7 @@ class OrderService < Restate::Service
 end
 ```
 
-The following accessors are available, each returning the appropriately-typed context:
+The following fiber-local accessors are available, each returning the appropriately-typed context:
 
 | Accessor | Returns | Use in |
 |----------|---------|--------|
@@ -452,13 +444,13 @@ ctx.cancel_invocation(invocation_id)
 ```ruby
 class MyService < Restate::Service
   # Inline decorator style
-  handler def greet(name)
+  handler def greet(ctx, name)
     "Hello, #{name}!"
   end
 
   # With options
   handler :process, input: String, output: Hash
-  def process(input)
+  def process(ctx, input)
     { 'result' => input.upcase }
   end
 end
@@ -521,14 +513,15 @@ end
 
 ### Handler Arity
 
-Handlers can accept 0 or 1 parameters:
+Every handler receives `ctx` as its first parameter. An optional second parameter receives the
+deserialized input:
 
 ```ruby
-handler def no_input              # Called with null/empty body
+handler def no_input(ctx)              # Called with null/empty body
   'ok'
 end
 
-handler def with_input(data)      # data = deserialized JSON body
+handler def with_input(ctx, data)      # data = deserialized JSON body
   data['name']
 end
 ```
@@ -567,7 +560,7 @@ class OrderProcessor < Restate::VirtualObject
                           exponentiation_factor: 2.0,
                           on_max_attempts: :kill
 
-  handler def process(order)
+  handler def process(ctx, order)
     # ...
   end
 end
@@ -642,7 +635,7 @@ end
 
 class Greeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(request)
+  def greet(ctx, request)
     # request is a GreetingRequest instance, not a raw Hash
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
@@ -689,7 +682,7 @@ end
 
 class Greeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(request)
+  def greet(ctx, request)
     # request is a GreetingRequest instance, not a raw Hash
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
@@ -855,14 +848,12 @@ This creates RBI files under `sorbet/rbi/dsl/` — one per service class. For ex
 
 ```ruby
 class Counter < Restate::VirtualObject
-  handler def add(addend)
-    ctx = Restate.current_object_context
+  handler def add(ctx, addend)
     old = ctx.get('count') || 0
     ctx.set('count', old + addend)
   end
 
-  shared def get
-    ctx = Restate.current_object_context
+  shared def get(ctx)
     ctx.get('count') || 0
   end
 end
@@ -873,11 +864,11 @@ Tapioca generates:
 ```ruby
 # sorbet/rbi/dsl/counter.rbi (auto-generated, do not edit)
 class Counter
-  sig { params(input: T.untyped).returns(T.untyped) }
-  def add(input); end
+  sig { params(ctx: Restate::ObjectContext, input: T.untyped).returns(T.untyped) }
+  def add(ctx, input); end
 
-  sig { returns(T.untyped) }
-  def get; end
+  sig { params(ctx: Restate::ObjectSharedContext).returns(T.untyped) }
+  def get(ctx); end
 end
 ```
 
@@ -900,9 +891,7 @@ by adding type annotations to the context accessor:
 
 ```ruby
 class Greeter < Restate::Service
-  handler def greet(name)
-    # @type [Restate::Context]
-    ctx = Restate.current_context
+  handler def greet(ctx, name)
     ctx.run_sync('step') { "Hello, #{name}!" }
   end
 end
@@ -1081,26 +1070,22 @@ restate deployments register http://localhost:9080
 
 ```ruby
 class MyService < Restate::Service
-  handler def method(arg)
-    ctx = Restate.current_context
+  handler def method(ctx, arg)
+    # ctx is always the first parameter
   end
 end
 
 class MyObject < Restate::VirtualObject
-  handler def exclusive_method(arg)              # One at a time per key
-    ctx = Restate.current_object_context
+  handler def exclusive_method(ctx, arg)         # One at a time per key
   end
-  shared def concurrent_method                   # Many readers
-    ctx = Restate.current_object_context
+  shared def concurrent_method(ctx)              # Many readers
   end
 end
 
 class MyWorkflow < Restate::Workflow
-  main def run(arg)                              # Runs once per key
-    ctx = Restate.current_workflow_context
+  main def run(ctx, arg)                         # Runs once per key
   end
-  handler def query                              # Shared handler
-    ctx = Restate.current_workflow_context
+  handler def query(ctx)                         # Shared handler
   end
 end
 ```

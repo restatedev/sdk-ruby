@@ -146,14 +146,13 @@ This is the most complex part. See [Invocation Execution Flow](#invocation-execu
 
 ### ServerContext (`lib/restate/server_context.rb`)
 
-The context object accessed via fiber-local accessors (e.g., `Restate.current_context`). Implements:
+The context object passed as the first argument to every handler. Implements:
 
-- **Fiber-local context storage** — `enter` sets the current context, service kind, and handler
-  kind in fiber-local storage (`Thread.current[:restate_context]`, `:restate_service_kind`,
-  `:restate_handler_kind`) before invoking the handler, and clears them in an `ensure` block.
-  This enables `Restate.current_context` and the type-specific accessors to retrieve the context
-  from anywhere within the handler's fiber. Each accessor validates both service kind and handler
-  kind at runtime. The context hierarchy provides type safety:
+- **Context delivery** — `enter` passes `self` as the first argument to the handler via
+  `invoke_handler(handler:, ctx: self, in_buffer:)`. The context is also stored in fiber-local
+  storage (`Thread.current[:restate_context]`, `:restate_service_kind`, `:restate_handler_kind`)
+  so that nested helper methods can access it via `Restate.current_context` and the type-specific
+  accessors. Each accessor validates both service kind and handler kind at runtime. The context hierarchy provides type safety:
   - `Context` — base (run, sleep, calls, awakeables)
   - `ObjectSharedContext` — read-only state (get, state_keys, key)
   - `ObjectContext` — full state (+ set, clear, clear_all)
@@ -200,8 +199,9 @@ instance state should go through `ctx.get`/`ctx.set`.
 
 ### Handler Dispatch (`lib/restate/handler.rb`)
 
-`Restate.invoke_handler` deserializes input via `handler_io.input_serde`, calls the block with
-`()` or `(input)` based on arity, then serializes output via `handler_io.output_serde`.
+`Restate.invoke_handler` receives the context and raw input bytes. It always passes `ctx` as the
+first argument. If arity is 2, it also deserializes input via `handler_io.input_serde` and passes
+it as the second argument. Output is serialized via `handler_io.output_serde`.
 
 **Data structures:**
 - `ServiceTag` = `Struct.new(:kind, :name, :description, :metadata)`

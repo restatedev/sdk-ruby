@@ -46,12 +46,12 @@ module Restate
 
   # ── Fiber-local context accessors ──
   #
-  # The SDK stores the current handler context in fiber-local storage
-  # (Thread.current[], which is fiber-scoped in Ruby). These methods
-  # retrieve it with the appropriate type for IDE completion.
+  # The SDK passes the context as the first argument to every handler.
+  # It is also stored in fiber-local storage (Thread.current[], which is
+  # fiber-scoped in Ruby). These methods retrieve it with the appropriate
+  # type for IDE completion.
   #
-  # Use these instead of the +ctx+ parameter when you need the context
-  # from a nested method that doesn't have +ctx+ in scope.
+  # Use these from nested helper methods that don't have +ctx+ in scope.
 
   # Returns the current context for a Service handler.
   # Raises if called outside a Restate handler.

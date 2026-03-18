@@ -31,19 +31,16 @@ def await_future_result(type, future)
 end
 
 class VirtualObjectCommandInterpreter < Restate::VirtualObject
-  shared def getResults # rubocop:disable Naming/MethodName
-    ctx = Restate.current_shared_context
+  shared def getResults(ctx) # rubocop:disable Naming/MethodName
     ctx.get('results') || []
   end
 
-  shared def hasAwakeable(awk_key) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
-    ctx = Restate.current_shared_context
+  shared def hasAwakeable(ctx, awk_key) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
     awk_id = ctx.get("awk-#{awk_key}")
     !awk_id.nil?
   end
 
-  shared def resolveAwakeable(req) # rubocop:disable Naming/MethodName
-    ctx = Restate.current_shared_context
+  shared def resolveAwakeable(ctx, req) # rubocop:disable Naming/MethodName
     awk_id = ctx.get("awk-#{req['awakeableKey']}")
     raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
@@ -51,8 +48,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
     nil
   end
 
-  shared def rejectAwakeable(req) # rubocop:disable Naming/MethodName
-    ctx = Restate.current_shared_context
+  shared def rejectAwakeable(ctx, req) # rubocop:disable Naming/MethodName
     awk_id = ctx.get("awk-#{req['awakeableKey']}")
     raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
@@ -60,8 +56,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
     nil
   end
 
-  handler def interpretCommands(req) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Naming/MethodName,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
-    ctx = Restate.current_object_context
+  handler def interpretCommands(ctx, req) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Naming/MethodName,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
     result = ''
 
     req['commands'].each do |cmd| # rubocop:disable Metrics/BlockLength

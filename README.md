@@ -5,14 +5,15 @@
 
 # Restate Ruby SDK
 
+> **Note:** This SDK is currently under active development. APIs may change between releases.
+
 [Restate](https://restate.dev/) is a system for easily building resilient applications using *distributed durable async/await*. This repository contains the Restate SDK for writing services in **Ruby**.
 
 ```ruby
 require 'restate'
 
 class Greeter < Restate::Service
-  handler def greet(name)
-    ctx = Restate.current_context
+  handler def greet(ctx, name)
     ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   end
 end
@@ -66,9 +67,7 @@ end
 
 class EventService < Restate::Service
   handler :register, input: RegistrationRequest, output: RegistrationResponse
-  def register(request)
-    ctx = Restate.current_context
-
+  def register(ctx, request)
     registration_id = ctx.run_sync('create-registration') do
       "reg_#{request.event_name}_#{rand(10_000)}"
     end

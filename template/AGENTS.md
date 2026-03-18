@@ -12,6 +12,7 @@ Handlers survive crashes, retries, and infrastructure failures — with the simp
 - `config.ru` — Rack entry point, binds services to a Restate endpoint
 - `greeter.rb` — Example service (add your own service files alongside it)
 - `Gemfile` — Dependencies
+- `Makefile` — `make verify` runs tapioca + lint + typecheck
 
 ## Running
 
@@ -30,12 +31,19 @@ restate deployments register http://localhost:9080       # Register with Restate
 
 ### Context
 
-Every handler accesses Restate operations through a context object:
+Every handler receives a context object as its first argument:
 
 ```ruby
-ctx = Restate.current_context              # Service handlers
-ctx = Restate.current_object_context       # VirtualObject handlers
-ctx = Restate.current_workflow_context     # Workflow handlers
+handler def greet(ctx, name)               # ctx is always the first parameter
+  ctx.run_sync('step') { ... }
+end
+```
+
+For nested helper methods, use the fiber-local accessors:
+```ruby
+Restate.current_context              # Service handlers
+Restate.current_object_context       # VirtualObject handlers
+Restate.current_workflow_context     # Workflow handlers
 ```
 
 ### Durable execution
@@ -83,7 +91,7 @@ end
 
 class MyService < Restate::Service
   handler :process, input: MyRequest, output: String
-  def process(request)
+  def process(ctx, request)
     "Hello, #{request.name}!"
   end
 end
@@ -129,9 +137,15 @@ endpoint = Restate.endpoint(ServiceA, ServiceB)
 run endpoint.app   # in config.ru
 ```
 
+## Verification
+
+Always run `make verify` after changes. This runs tapioca (type generation), rubocop (lint),
+and sorbet (typecheck).
+
 ## Code style
 
 - Use `T::Struct` for typed handler input/output
-- Obtain context at the start of each handler via `Restate.current_context` (or the appropriate variant)
+- Every handler receives `ctx` as its first argument
+- Use `Restate.current_context` (or variants) only in nested helper methods
 - Use `run_sync` for sequential side effects, `run` + `.await` for fan-out
 - Catch `Restate::TerminalError` specifically, never bare `rescue => e`

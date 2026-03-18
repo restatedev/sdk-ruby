@@ -6,12 +6,11 @@ module Restate
   #
   # @example
   #   class Signup < Restate::Workflow
-  #     main def run(email)
+  #     main def run(ctx, email)
   #       # workflow logic
   #     end
   #
-  #     handler def status
-  #       ctx = Restate.current_workflow_context
+  #     handler def status(ctx)
   #       ctx.get("status")
   #     end
   #   end
@@ -20,7 +19,7 @@ module Restate
     extend ServiceDSL
 
     # Register the main workflow entry point.
-    # Use as: +main def run(arg)+ or +main :run, input: String+
+    # Use as: +main def run(ctx, arg)+ or +main :run, input: String+
     #
     # @param method_name [Symbol] name of the method to register
     # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)

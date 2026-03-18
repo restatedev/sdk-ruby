@@ -31,20 +31,20 @@ module Restate
 
   module_function
 
-  # Invoke a handler with raw input bytes. The context is available via
-  # fiber-local Restate.current_context (set by ServerContext#enter).
+  # Invoke a handler with the context and raw input bytes.
+  # The context is passed as the first argument to every handler.
   # Returns raw output bytes.
-  sig { params(handler: T.untyped, in_buffer: String).returns(String) }
-  def invoke_handler(handler:, in_buffer:)
-    if handler.arity == 1
+  sig { params(handler: T.untyped, ctx: T.untyped, in_buffer: String).returns(String) }
+  def invoke_handler(handler:, ctx:, in_buffer:)
+    if handler.arity == 2
       begin
         in_arg = handler.handler_io.input_serde.deserialize(in_buffer)
       rescue StandardError => e
         Kernel.raise TerminalError, "Unable to parse input argument: #{e.message}"
       end
-      out_arg = handler.callable.call(in_arg)
+      out_arg = handler.callable.call(ctx, in_arg)
     else
-      out_arg = handler.callable.call
+      out_arg = handler.callable.call(ctx)
     end
     handler.handler_io.output_serde.serialize(out_arg)
   end

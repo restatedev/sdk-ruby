@@ -6,15 +6,13 @@ module Restate
   #
   # @example
   #   class Counter < Restate::VirtualObject
-  #     handler def add(addend)
-  #       ctx = Restate.current_object_context
+  #     handler def add(ctx, addend)
   #       old = ctx.get("count") || 0
   #       ctx.set("count", old + addend)
   #       old + addend
   #     end
   #
-  #     shared def get
-  #       ctx = Restate.current_object_context
+  #     shared def get(ctx)
   #       ctx.get("count") || 0
   #     end
   #   end
@@ -22,7 +20,7 @@ module Restate
     extend T::Sig
     extend ServiceDSL
 
-    # Register an exclusive handler. Use as: +handler def my_method(arg)+
+    # Register an exclusive handler. Use as: +handler def my_method(ctx, arg)+
     #
     # @param method_name [Symbol] name of the method to register
     # @param kind [Symbol] concurrency mode (+:exclusive+ or +:shared+)

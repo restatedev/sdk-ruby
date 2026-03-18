@@ -6,8 +6,8 @@ module Restate
   #
   # @example
   #   class Greeter < Restate::Service
-  #     handler def greet(name)
-  #       "Hello, #{name}!"
+  #     handler def greet(ctx, name)
+  #       ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   #     end
   #   end
   class Service
@@ -15,7 +15,7 @@ module Restate
     extend ServiceDSL
 
     # Register a handler method on this service.
-    # Use as: +handler def my_method(arg)+ or +handler :my_method, input: String+
+    # Use as: +handler def my_method(ctx, arg)+ or +handler :my_method, input: String+
     #
     # @param method_name [Symbol] name of the method to register
     # @param opts [Hash] handler options (+input:+, +output:+, +accept:+, +content_type:+)

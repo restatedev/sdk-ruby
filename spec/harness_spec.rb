@@ -21,53 +21,47 @@ end
 
 class TestGreeter < Restate::Service
   handler :greet
-  def greet(name)
-    ctx = Restate.current_context
+  def greet(ctx, name)
     ctx.run("build-greeting") { "Hello, #{name}!" }.await
   end
 end
 
 class TestCounter < Restate::VirtualObject
-  handler def add(addend)
-    ctx = Restate.current_object_context
+  handler def add(ctx, addend)
     old_value = ctx.get("count") || 0
     new_value = old_value + addend
     ctx.set("count", new_value)
     {"oldValue" => old_value, "newValue" => new_value}
   end
 
-  shared def get
-    ctx = Restate.current_shared_context
+  shared def get(ctx)
     ctx.get("count") || 0
   end
 end
 
 class TestWorker < Restate::Service
-  handler def process(input)
-    ctx = Restate.current_context
+  handler def process(ctx, input)
     ctx.run("do-work") { "processed:#{input}" }.await
   end
 end
 
 class TestOrchestrator < Restate::Service
-  handler def orchestrate(input)
-    ctx = Restate.current_context
+  handler def orchestrate(ctx, input)
     result = ctx.service_call(TestWorker, :process, input).await
     "orchestrated:#{result}"
   end
 end
 
 class TestRunSync < Restate::Service
-  handler def compute(input)
-    ctx = Restate.current_context
+  handler def compute(ctx, input)
     result = ctx.run_sync("heavy-computation") { input * 2 }
     "result:#{result}"
   end
 end
 
 class TestFiberLocalCtx < Restate::Service
-  handler def process(input)
-    # Access context via fiber-local accessor instead of ctx parameter
+  handler def process(ctx, input)
+    # Access context via fiber-local accessor from a nested method
     do_work(input)
   end
 
@@ -87,7 +81,7 @@ end
 
 class TStructGreeter < Restate::Service
   handler :greet, input: TStructRequest, output: String
-  def greet(request)
+  def greet(_ctx, request)
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
   end
@@ -95,7 +89,7 @@ end
 
 class TypedGreeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(request)
+  def greet(_ctx, request)
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
   end

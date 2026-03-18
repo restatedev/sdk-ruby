@@ -18,8 +18,7 @@ def increment_counter
 end
 
 class NonDeterministic < Restate::VirtualObject
-  handler def setDifferentKey # rubocop:disable Naming/MethodName
-    ctx = Restate.current_object_context
+  handler def setDifferentKey(ctx) # rubocop:disable Naming/MethodName
     if do_left_action
       ctx.set('a', 'my-state')
     else
@@ -30,8 +29,7 @@ class NonDeterministic < Restate::VirtualObject
     nil
   end
 
-  handler def backgroundInvokeWithDifferentTargets # rubocop:disable Naming/MethodName
-    ctx = Restate.current_object_context
+  handler def backgroundInvokeWithDifferentTargets(ctx) # rubocop:disable Naming/MethodName
     if do_left_action
       ctx.object_send('Counter', 'get', 'abc', nil)
     else
@@ -42,8 +40,7 @@ class NonDeterministic < Restate::VirtualObject
     nil
   end
 
-  handler def callDifferentMethod # rubocop:disable Naming/MethodName
-    ctx = Restate.current_object_context
+  handler def callDifferentMethod(ctx) # rubocop:disable Naming/MethodName
     if do_left_action
       ctx.object_call('Counter', 'get', 'abc', nil).await
     else
@@ -54,8 +51,7 @@ class NonDeterministic < Restate::VirtualObject
     nil
   end
 
-  handler def eitherSleepOrCall # rubocop:disable Naming/MethodName
-    ctx = Restate.current_object_context
+  handler def eitherSleepOrCall(ctx) # rubocop:disable Naming/MethodName
     if do_left_action
       ctx.sleep(0.1).await
     else

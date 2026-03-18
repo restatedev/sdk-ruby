@@ -24,16 +24,7 @@ require 'restate'
 
 # A simple worker that simulates processing a task.
 class Worker < Restate::Service
-  handler def process(task)
-    do_work(task)
-  end
-
-  private
-
-  # Demonstrates Restate.current_context — access the handler context
-  # from any method without threading `ctx` through every call.
-  def do_work(task)
-    ctx = Restate.current_context
+  handler def process(ctx, task)
     ctx.run_sync('do-work') do
       { 'task' => task, 'result' => "completed_#{task}" }
     end
@@ -42,8 +33,7 @@ end
 
 # Fan-out: dispatch tasks in parallel, collect all results.
 class FanOut < Restate::Service
-  handler def run(tasks)
-    ctx = Restate.current_context
+  handler def run(ctx, tasks)
     # Launch a call for each task
     futures = tasks.map do |task|
       ctx.service_call(Worker, :process, task)
@@ -59,8 +49,7 @@ class FanOut < Restate::Service
   end
 
   # Race two calls and return the first result.
-  handler def race(tasks)
-    ctx = Restate.current_context
+  handler def race(ctx, tasks)
     futures = tasks.map do |task|
       ctx.service_call(Worker, :process, task)
     end
@@ -71,8 +60,7 @@ class FanOut < Restate::Service
   end
 
   # Awakeable: pause until an external system resolves the callback.
-  handler def with_callback(task)
-    ctx = Restate.current_context
+  handler def with_callback(ctx, task)
     awakeable_id, future = ctx.awakeable
 
     # Send the awakeable ID to an external system (via a side effect)

@@ -212,10 +212,13 @@ module Restate
   class TypeSerde
     extend T::Sig
 
+    sig { returns(T.untyped) }
+    attr_reader :type_class
+
     # Create a TypeSerde for the given type with a precomputed JSON Schema.
     sig { params(type: T.untyped, schema: T.nilable(T::Hash[String, T.untyped])).void }
     def initialize(type, schema)
-      @type = type
+      @type_class = type
       @schema = schema
     end
 
@@ -242,6 +245,9 @@ module Restate
   # Deserializes JSON into struct instances, serializes structs to JSON.
   class DryStructSerde
     extend T::Sig
+
+    sig { returns(T.untyped) }
+    attr_reader :struct_class
 
     # Create a DryStructSerde for the given Dry::Struct class.
     sig { params(struct_class: T.untyped).void }
@@ -279,6 +285,9 @@ module Restate
   # Generates JSON Schema from T::Struct props introspection.
   class TStructSerde
     extend T::Sig
+
+    sig { returns(T.class_of(T::Struct)) }
+    attr_reader :struct_class
 
     # Create a TStructSerde for the given T::Struct subclass.
     sig { params(struct_class: T.class_of(T::Struct)).void }

@@ -13,9 +13,7 @@ end
 
 class Greeter < Restate::Service # rubocop:disable Style/OneClassPerFile
   handler :greet, input: GreetingRequest, output: GreetingResponse
-  def greet(request)
-    ctx = Restate.current_context
-
+  def greet(ctx, request)
     message = ctx.run_sync('build-greeting') do
       "Hello, #{request.name}!"
     end
