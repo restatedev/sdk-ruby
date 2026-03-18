@@ -1,0 +1,8 @@
+{
+	"seed"	: "${SEED}",
+	"keys"	: 1000,
+	"tests" : 1000,
+	"maxProgramSize"	:  10,
+	"crashInterval"		: 0,
+	"bootstrap"				: true
+}

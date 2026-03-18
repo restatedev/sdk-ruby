@@ -13,12 +13,14 @@ require_relative 'services/cancel_test'
 require_relative 'services/kill_test'
 require_relative 'services/block_and_wait_workflow'
 require_relative 'services/virtual_object_command_interpreter'
+require_relative 'services/interpreter'
 
 ALL_SERVICES = [
   Counter, ListObject, MapObject, Failing, NonDeterministic,
   TestUtilsService, Proxy, AwakeableHolder, CancelTestRunner,
   CancelTestBlockingService, KillTestRunner, KillTestSingleton,
-  BlockAndWaitWorkflow, VirtualObjectCommandInterpreter
+  BlockAndWaitWorkflow, VirtualObjectCommandInterpreter,
+  ServiceInterpreterHelper, ObjectInterpreterL0, ObjectInterpreterL1, ObjectInterpreterL2
 ].freeze
 
 def services_named(names)
