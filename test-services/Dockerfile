@@ -26,6 +26,11 @@ RUN bundle install && bundle exec rake compile
 # ── Runtime stage ──
 FROM ruby:3.3-slim-bookworm AS test-services
 
+# Install build tools for native gem extensions (e.g. json)
+RUN apt-get update -y && \
+    apt-get install -y build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /usr/src/app
 
 # Copy the built SDK (with compiled native extension)
