@@ -95,13 +95,32 @@ class TypedGreeter < Restate::Service
   end
 end
 
+# Middleware that stores the invocation in fiber-local storage so the handler can see it ran.
+class TestHeaderMiddleware
+  def call(handler, ctx)
+    team_id = ctx.request.headers['x-team-id']
+    Thread.current[:test_team_id] = team_id
+    yield
+  ensure
+    Thread.current[:test_team_id] = nil
+  end
+end
+
+class MiddlewareTestService < Restate::Service
+  handler def check_header(ctx, _input)
+    team = Thread.current[:test_team_id] || 'none'
+    "team:#{team}"
+  end
+end
+
 # ── Helpers ──────────────────────────────────────────────────
 
-def post_json(base_url, path, body)
+def post_json(base_url, path, body, headers: {})
   uri = URI("#{base_url}#{path}")
   request = Net::HTTP::Post.new(uri)
   request["Content-Type"] = "application/json"
   request["idempotency-key"] = SecureRandom.uuid
+  headers.each { |k, v| request[k] = v }
   request.body = JSON.generate(body)
   Net::HTTP.start(uri.hostname, uri.port, read_timeout: 30) { |http| http.request(request) }
 end
@@ -112,8 +131,10 @@ RSpec.describe Restate::Testing do
   before(:all) do
     @harness = Restate::Testing::RestateTestHarness.new(
       TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TestFiberLocalCtx,
-      TStructGreeter, TypedGreeter
-    )
+      TStructGreeter, TypedGreeter, MiddlewareTestService
+    ) do |endpoint|
+      endpoint.use(TestHeaderMiddleware)
+    end
     @harness.start
   end
 
@@ -185,5 +206,18 @@ RSpec.describe Restate::Testing do
                          { "name" => "World", "greeting" => "Hi" })
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("Hi, World!")
+  end
+
+  it "runs handler middleware that extracts headers" do
+    response = post_json(@harness.ingress_url, "/MiddlewareTestService/check_header", nil,
+                         headers: { "x-team-id" => "acme-corp" })
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("team:acme-corp")
+  end
+
+  it "runs handler middleware with missing header" do
+    response = post_json(@harness.ingress_url, "/MiddlewareTestService/check_header", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("team:none")
   end
 end
