@@ -277,13 +277,61 @@ module Restate
   end
 
   # Stateless service base class.
-  class Service; end
+  class Service
+    sig { returns(ServiceCallProxy) }
+    def self.call; end
+
+    sig { params(delay: T.nilable(Numeric)).returns(ServiceSendProxy) }
+    def self.send!(delay: nil); end
+  end
 
   # Keyed virtual object base class.
-  class VirtualObject; end
+  class VirtualObject
+    sig { params(key: String).returns(ServiceCallProxy) }
+    def self.call(key); end
+
+    sig { params(key: String, delay: T.nilable(Numeric)).returns(ServiceSendProxy) }
+    def self.send!(key, delay: nil); end
+
+    sig { params(name: Symbol, default: T.untyped, serde: T.untyped).void }
+    def self.state(name, default: nil, serde: nil); end
+  end
 
   # Durable workflow base class.
-  class Workflow; end
+  class Workflow
+    sig { params(key: String).returns(ServiceCallProxy) }
+    def self.call(key); end
+
+    sig { params(key: String, delay: T.nilable(Numeric)).returns(ServiceSendProxy) }
+    def self.send!(key, delay: nil); end
+
+    sig { params(name: Symbol, default: T.untyped, serde: T.untyped).void }
+    def self.state(name, default: nil, serde: nil); end
+  end
+
+  # Proxy for fluent durable calls.
+  class ServiceCallProxy; end
+
+  # Proxy for fluent fire-and-forget sends.
+  class ServiceSendProxy; end
+
+  # HTTP client for invoking Restate services from outside the runtime.
+  class Client
+    sig { params(base_url: String, headers: T::Hash[String, String]).void }
+    def initialize(base_url, headers: {}); end
+
+    sig { params(service: T.any(String, T::Class[T.anything])).returns(ClientServiceProxy) }
+    def service(service); end
+
+    sig { params(service: T.any(String, T::Class[T.anything]), key: String).returns(ClientServiceProxy) }
+    def object(service, key); end
+
+    sig { params(service: T.any(String, T::Class[T.anything]), key: String).returns(ClientServiceProxy) }
+    def workflow(service, key); end
+  end
+
+  # Proxy for HTTP client calls.
+  class ClientServiceProxy; end
 
   class Endpoint
     sig { params(services: T.untyped).void }
@@ -297,6 +345,9 @@ module Restate
 
     sig { params(key: String).void }
     def identity_key(key); end
+
+    sig { params(klass: T.untyped, args: T.untyped, kwargs: T.untyped).returns(T.self_type) }
+    def use(klass, *args, **kwargs); end
 
     sig { returns(T.untyped) }
     def app; end

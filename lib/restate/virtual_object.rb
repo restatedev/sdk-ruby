@@ -49,6 +49,30 @@ module Restate
       _register_handler(method_name, **T.unsafe({ kind: 'shared', **opts }))
     end
 
+    # Returns a call proxy for fluent durable calls to this virtual object.
+    #
+    # @example
+    #   Counter.call("my-key").add(5).await
+    #
+    # @param key [String] the object key
+    # @return [ServiceCallProxy]
+    def self.call(key)
+      ServiceCallProxy.new(self, key: key, call_method: :object_call)
+    end
+
+    # Returns a send proxy for fluent fire-and-forget sends to this virtual object.
+    #
+    # @example
+    #   Counter.send!("my-key").add(5)
+    #   Counter.send!("my-key", delay: 60).add(5)
+    #
+    # @param key [String] the object key
+    # @param delay [Numeric, nil] optional delay in seconds
+    # @return [ServiceSendProxy]
+    def self.send!(key, delay: nil)
+      ServiceSendProxy.new(self, key: key, send_method: :object_send, delay: delay)
+    end
+
     def self._service_kind
       'object'
     end

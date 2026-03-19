@@ -50,12 +50,14 @@ lib/
     ├── serde.rb                     JsonSerde, BytesSerde, TStructSerde, DryStructSerde, serde resolution
     ├── server.rb                    Rack 3 app — routes, I/O streaming, Async tasks
     ├── server_context.rb            ctx object — state, sleep, run, calls, progress loop
-    ├── service.rb                   Stateless Service class + handler DSL
-    ├── service_dsl.rb               Shared class-level DSL (inherited by all service types)
-    ├── virtual_object.rb            VirtualObject class + handler/shared DSL
+    ├── client.rb                    HTTP client for external invocation (Restate::Client)
+    ├── service.rb                   Stateless Service class + handler DSL + .call/.send!
+    ├── service_dsl.rb               Shared class-level DSL (inherited by all service types) + state macro
+    ├── service_proxy.rb             ServiceCallProxy/ServiceSendProxy for fluent call API
+    ├── virtual_object.rb            VirtualObject class + handler/shared DSL + .call/.send!
     ├── testing.rb                   Test harness (opt-in: require 'restate/testing')
     ├── vm.rb                        VMWrapper — Ruby bridge to native VM
-    └── workflow.rb                  Workflow class + main/handler DSL
+    └── workflow.rb                  Workflow class + main/handler DSL + .call/.send!
 lib/tapioca/dsl/compilers/
 └── restate.rb                       Tapioca DSL compiler — generates typed handler sigs
 
@@ -87,6 +89,14 @@ examples/                            Runnable examples showcasing SDK features
 ├── service_configuration.rb         Service-level config: timeouts, retention, retry policy
 ├── typed_handlers.rb               Dry::Struct input/output, JSON Schema generation
 └── typed_handlers_sorbet.rb        T::Struct (Sorbet) input/output, JSON Schema generation
+
+middleware_example/                   Self-contained middleware example (own Gemfile)
+├── config.ru                        OTel + tenant middleware wiring
+├── payment_service.rb               Service that reads tenant from fiber-local storage
+├── opentelemetry_middleware.rb       Real OTel spans with Restate attributes
+├── tenant_middleware.rb              Extracts x-tenant-id header to fiber-local
+├── test.rb                          Integration test using RestateTestHarness
+└── README.md                        Documentation
 ```
 
 ---

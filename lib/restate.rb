@@ -16,6 +16,8 @@ require_relative 'restate/server_context'
 require_relative 'restate/durable_future'
 require_relative 'restate/discovery'
 require_relative 'restate/endpoint'
+require_relative 'restate/service_proxy'
+require_relative 'restate/client'
 
 # Restate Ruby SDK — build resilient applications with durable execution.
 module Restate

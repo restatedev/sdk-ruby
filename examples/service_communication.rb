@@ -9,11 +9,12 @@
 # Restate replays the call and delivers the result.
 #
 # Features:
-#   - ctx.service_call  — typed RPC that returns a DurableCallFuture
-#   - ctx.service_send  — fire-and-forget (optionally delayed)
-#   - Fan-out/fan-in    — launch concurrent calls, collect results
-#   - ctx.wait_any      — race multiple futures, handle first completer
-#   - ctx.awakeable     — pause until an external system calls back
+#   - Service.call.handler(arg)  — fluent typed RPC (returns DurableCallFuture)
+#   - Service.send!.handler(arg) — fluent fire-and-forget (optionally delayed)
+#   - ctx.service_call / ctx.service_send — explicit RPC (same thing, verbose)
+#   - Fan-out/fan-in             — launch concurrent calls, collect results
+#   - ctx.wait_any               — race multiple futures, handle first completer
+#   - ctx.awakeable              — pause until an external system calls back
 #
 # Try it:
 #   curl localhost:8080/FanOut/run \
@@ -35,17 +36,17 @@ end
 # Fan-out: dispatch tasks in parallel, collect all results.
 class FanOut < Restate::Service
   # @param ctx [Restate::Context]
-  handler def run(ctx, tasks)
-    # Launch a call for each task
+  handler def run(_ctx, tasks)
+    # Fluent API: launch a call for each task
     futures = tasks.map do |task|
-      ctx.service_call(Worker, :process, task)
+      Worker.call.process(task)
     end
 
     # Fan-in: await all results
     results = futures.map(&:await)
 
-    # Fire-and-forget: schedule a delayed cleanup (runs after 60 s)
-    ctx.service_send(Worker, :process, 'cleanup', delay: 60.0)
+    # Fluent fire-and-forget: schedule a delayed cleanup (runs after 60 s)
+    Worker.send!(delay: 60).process('cleanup')
 
     { 'results' => results }
   end
@@ -54,7 +55,7 @@ class FanOut < Restate::Service
   # @param ctx [Restate::Context]
   handler def race(ctx, tasks)
     futures = tasks.map do |task|
-      ctx.service_call(Worker, :process, task)
+      Worker.call.process(task)
     end
 
     # wait_any returns [completed, remaining]

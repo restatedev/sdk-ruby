@@ -113,6 +113,53 @@ class MiddlewareTestService < Restate::Service
   end
 end
 
+# ── Declarative state test services ───────────────────────────
+
+class TestDeclCounter < Restate::VirtualObject
+  state :count, default: 0
+
+  handler def add(ctx, addend)
+    self.count += addend
+  end
+
+  shared def get(ctx)
+    count
+  end
+
+  handler def reset(ctx)
+    clear_count
+    'reset'
+  end
+end
+
+# ── Fluent call API test services ─────────────────────────────
+
+class TestFluentWorker < Restate::Service
+  handler def process(ctx, task)
+    ctx.run_sync('do-work') { "done:#{task}" }
+  end
+end
+
+class TestFluentOrchestrator < Restate::Service
+  handler def orchestrate(ctx, input)
+    # Use fluent call API
+    result = TestFluentWorker.call.process(input).await
+    "orchestrated:#{result}"
+  end
+
+  handler def fire_and_forget(ctx, input)
+    # Use fluent send API
+    TestFluentWorker.send!.process(input)
+    'sent'
+  end
+
+  handler def call_object(ctx, input)
+    # Use fluent call on virtual object
+    result = TestDeclCounter.call(input['key']).add(input['value']).await
+    "counter:#{result}"
+  end
+end
+
 # ── Helpers ──────────────────────────────────────────────────
 
 def post_json(base_url, path, body, headers: {})
@@ -131,7 +178,8 @@ RSpec.describe Restate::Testing do
   before(:all) do
     @harness = Restate::Testing::RestateTestHarness.new(
       TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TestFiberLocalCtx,
-      TStructGreeter, TypedGreeter, MiddlewareTestService
+      TStructGreeter, TypedGreeter, MiddlewareTestService,
+      TestDeclCounter, TestFluentWorker, TestFluentOrchestrator
     ) do |endpoint|
       endpoint.use(TestHeaderMiddleware)
     end
@@ -219,5 +267,80 @@ RSpec.describe Restate::Testing do
     response = post_json(@harness.ingress_url, "/MiddlewareTestService/check_header", nil)
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("team:none")
+  end
+
+  # ── Declarative state ──
+
+  it "uses declarative state getter and setter" do
+    key = SecureRandom.hex(8)
+
+    response = post_json(@harness.ingress_url, "/TestDeclCounter/#{key}/add", 10)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq(10)
+
+    response = post_json(@harness.ingress_url, "/TestDeclCounter/#{key}/get", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq(10)
+  end
+
+  it "returns declarative state default when unset" do
+    key = SecureRandom.hex(8)
+
+    response = post_json(@harness.ingress_url, "/TestDeclCounter/#{key}/get", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq(0)
+  end
+
+  it "clears declarative state" do
+    key = SecureRandom.hex(8)
+
+    post_json(@harness.ingress_url, "/TestDeclCounter/#{key}/add", 5)
+
+    response = post_json(@harness.ingress_url, "/TestDeclCounter/#{key}/reset", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("reset")
+
+    response = post_json(@harness.ingress_url, "/TestDeclCounter/#{key}/get", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq(0)
+  end
+
+  # ── Fluent call API ──
+
+  it "uses fluent call API for service-to-service calls" do
+    response = post_json(@harness.ingress_url, "/TestFluentOrchestrator/orchestrate", "hello")
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("orchestrated:done:hello")
+  end
+
+  it "uses fluent send! API for fire-and-forget" do
+    response = post_json(@harness.ingress_url, "/TestFluentOrchestrator/fire_and_forget", "hello")
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("sent")
+  end
+
+  it "uses fluent call API for virtual object calls" do
+    key = SecureRandom.hex(8)
+    response = post_json(@harness.ingress_url, "/TestFluentOrchestrator/call_object",
+                         { "key" => key, "value" => 7 })
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("counter:7")
+  end
+
+  # ── HTTP Client ──
+
+  it "invokes a service via Restate::Client" do
+    client = Restate::Client.new(@harness.ingress_url)
+    result = client.service("TestGreeter").greet("ClientTest")
+    expect(result).to eq("Hello, ClientTest!")
+  end
+
+  it "invokes a virtual object via Restate::Client" do
+    key = SecureRandom.hex(8)
+    client = Restate::Client.new(@harness.ingress_url)
+
+    client.object("TestDeclCounter", key).add(15)
+    result = client.object("TestDeclCounter", key).get(nil)
+    expect(result).to eq(15)
   end
 end

@@ -73,19 +73,19 @@ Each virtual object instance is identified by a key and has durable K/V state sc
 
 ```ruby
 class Counter < Restate::VirtualObject
-  # Exclusive handler — one invocation at a time per key.
+  state :count, default: 0    # Declarative state with auto-generated accessors
+
   handler def add(ctx, amount)
-    current = ctx.get('count') || 0
-    ctx.set('count', current + amount)
-    current + amount
+    self.count += amount       # Reads via ctx.get, writes via ctx.set
   end
 
-  # Shared handler — concurrent access allowed (read-only).
   shared def get(ctx)
-    ctx.get('count') || 0
+    count                      # Returns 0 when unset (the default)
   end
 end
 ```
+
+You can also use `ctx.get`/`ctx.set` directly — see [State Operations](#state-operations).
 
 **Invoke**: `POST /Counter/my-counter/add` (key is `my-counter`)
 
@@ -192,9 +192,40 @@ configurable via `RESTATE_BACKGROUND_POOL_SIZE`):
 result = ctx.run_sync('resize-image', background: true) { process_image(data) }
 ```
 
+### Declarative State
+
+The `state` macro declares durable state entries on VirtualObject and Workflow classes. It generates
+getter, setter, and clear methods that delegate to the context automatically.
+
+```ruby
+class Counter < Restate::VirtualObject
+  state :count, default: 0
+
+  handler def add(ctx, addend)
+    self.count += addend     # getter reads ctx.get('count'), setter calls ctx.set('count', ...)
+  end
+
+  shared def get(ctx)
+    count                    # returns 0 when state is unset
+  end
+
+  handler def reset(ctx)
+    clear_count              # removes the state entry
+  end
+end
+```
+
+**Options:**
+- `default:` — value returned when the state entry hasn't been set (default: `nil`)
+- `serde:` — custom serializer/deserializer (default: `JsonSerde`)
+
+**Note:** State names must differ from handler names, since both generate instance methods on
+the same class. If you need the same name, use `ctx.get`/`ctx.set` directly.
+
 ### State Operations
 
-Available in `VirtualObject` and `Workflow` handlers.
+You can also manage state explicitly via the context. Available in `VirtualObject` and `Workflow`
+handlers.
 
 ```ruby
 value = ctx.get('key')              # Read state (nil if absent)
@@ -235,10 +266,29 @@ The timer survives crashes — if the handler restarts, it resumes waiting for t
 
 ### Service Communication
 
-#### Synchronous Calls
+#### Fluent Call API (Recommended)
 
-Call another handler and await the result. The call is durable — if the caller crashes,
-Restate delivers the result when the caller retries.
+The fluent API reads like natural Ruby — call handlers directly on service classes:
+
+```ruby
+# Durable calls (return DurableCallFuture)
+result = Worker.call.process(task).await              # Service
+result = Counter.call("my-key").add(5).await          # VirtualObject
+result = UserSignup.call("user42").run(email).await   # Workflow
+
+# Fire-and-forget sends (return SendHandle)
+Worker.send!.process(task)                            # Service
+Counter.send!("my-key").add(5)                        # VirtualObject
+Worker.send!(delay: 60).process('cleanup')            # Delayed send
+```
+
+Under the hood this delegates to `ctx.service_call`/`ctx.object_call`/etc. — the fluent API
+is pure syntactic sugar with no behavior difference.
+
+#### Explicit Calls
+
+For full control over options (idempotency keys, custom headers, serde overrides), use the
+context methods directly:
 
 ```ruby
 # Typed call (resolves serdes from target handler registration)
@@ -612,6 +662,59 @@ run endpoint.app  # In config.ru
 
 ---
 
+## Middleware
+
+Middleware wraps every handler invocation, following the
+[Sidekiq middleware](https://github.com/sidekiq/sidekiq/wiki/Middleware) pattern. A middleware is a
+class with a `call(handler, ctx)` method that uses `yield` to invoke the next middleware or the
+handler itself.
+
+```ruby
+class TimingMiddleware
+  def call(handler, ctx)
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = yield
+    duration = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
+    puts "#{handler.service_tag.name}/#{handler.name} took #{duration}s"
+    result
+  end
+end
+
+endpoint = Restate.endpoint(MyService)
+endpoint.use(TimingMiddleware)
+```
+
+**Middleware with configuration:**
+
+```ruby
+class AuthMiddleware
+  def initialize(api_key:)
+    @api_key = api_key
+  end
+
+  def call(handler, ctx)
+    raise Restate::TerminalError.new('unauthorized', status_code: 401) unless valid?(ctx)
+    yield
+  end
+end
+
+endpoint.use(AuthMiddleware, api_key: 'secret')
+```
+
+**Available in `call`:**
+- `handler.name` — handler method name
+- `handler.service_tag.name` — service name
+- `handler.service_tag.kind` — `"service"`, `"object"`, or `"workflow"`
+- `ctx.request.id` — invocation ID
+- `ctx.request.headers` — request headers
+
+Middleware executes in registration order. Each wraps the next, forming an onion around the handler.
+
+See [`middleware_example/`](../middleware_example/) for a complete working example with real
+OpenTelemetry tracing and tenant isolation.
+
+---
+
 ## Typed Handlers
 
 The `input:` and `output:` options on handler declarations let you use typed structs for
@@ -897,6 +1000,41 @@ Run `tapioca dsl` again whenever you add or rename handlers. Commit the generate
 
 ---
 
+## HTTP Client
+
+The SDK ships an HTTP client for invoking Restate services from **outside** the Restate runtime
+(e.g., from a web controller, a script, or tests). It uses the Restate ingress HTTP API.
+
+```ruby
+require 'restate'
+
+client = Restate::Client.new("http://localhost:8080")
+
+# Stateless service
+result = client.service(Greeter).greet("World")
+result = client.service("Greeter").greet("World")   # string name also works
+
+# Keyed virtual object
+result = client.object(Counter, "my-key").add(5)
+result = client.object(Counter, "my-key").get(nil)
+
+# Workflow
+result = client.workflow(UserSignup, "user42").run("user@example.com")
+```
+
+**With custom headers** (e.g., authentication):
+
+```ruby
+client = Restate::Client.new("http://localhost:8080", headers: {
+  "Authorization" => "Bearer token123"
+})
+```
+
+**Note:** The client is for external invocation only. Inside a handler, use the fluent call API
+or `ctx.service_call` — these are durable and survive crashes.
+
+---
+
 ## Running
 
 ### Development
@@ -1043,12 +1181,13 @@ The `examples/` directory contains runnable examples:
 |------|-------|
 | `greeter.rb` | Hello World: simplest stateless service |
 | `durable_execution.rb` | `ctx.run`, `ctx.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
-| `virtual_objects.rb` | State ops, `handler` vs `shared`, `state_keys`, `clear_all` |
-| `workflow.rb` | Promises, signals, workflow state |
-| `service_communication.rb` | Calls, sends, fan-out/fan-in, `wait_any`, awakeables |
+| `virtual_objects.rb` | Declarative state, `handler` vs `shared`, `state_keys`, `clear_all` |
+| `workflow.rb` | Declarative state, promises, signals |
+| `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 | `typed_handlers_sorbet.rb` | `input:`/`output:` with `T::Struct` (Sorbet), JSON Schema generation |
 | `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
+| [`middleware_example/`](../middleware_example/) | Real OpenTelemetry tracing + tenant isolation middleware (self-contained) |
 
 Run any example:
 ```bash
@@ -1071,6 +1210,7 @@ class MyService < Restate::Service
 end
 
 class MyObject < Restate::VirtualObject
+  state :count, default: 0                       # Declarative state
   handler def exclusive_method(ctx, arg)         # One at a time per key
   end
   shared def concurrent_method(ctx)              # Many readers
@@ -1078,6 +1218,7 @@ class MyObject < Restate::VirtualObject
 end
 
 class MyWorkflow < Restate::Workflow
+  state :status, default: 'pending'              # Declarative state
   main def run(ctx, arg)                         # Runs once per key
   end
   handler def query(ctx)                         # Shared handler
@@ -1088,7 +1229,11 @@ end
 ### Context Methods
 
 ```ruby
-# State (VirtualObject / Workflow)
+# Declarative state (VirtualObject / Workflow)
+state :name, default: nil, serde: nil  # class-level macro
+self.name / self.name= / clear_name   # generated instance methods
+
+# Explicit state (VirtualObject / Workflow)
 ctx.get(name) → value | nil
 ctx.get_async(name) → DurableFuture
 ctx.set(name, value)
@@ -1102,12 +1247,22 @@ ctx.run(name, background: false) { block } → DurableFuture
 ctx.run_sync(name, background: false) { block } → value   # run + await
 ctx.sleep(seconds) → DurableFuture
 
-# Service calls
+# Fluent service calls (recommended)
+MyService.call.handler(arg) → DurableCallFuture
+MyObject.call("key").handler(arg) → DurableCallFuture
+MyWorkflow.call("key").handler(arg) → DurableCallFuture
+
+# Fluent fire-and-forget
+MyService.send!.handler(arg) → SendHandle
+MyObject.send!("key").handler(arg) → SendHandle
+MyService.send!(delay: 60).handler(arg) → SendHandle
+
+# Explicit service calls
 ctx.service_call(svc, handler, arg) → DurableCallFuture
 ctx.object_call(svc, handler, key, arg) → DurableCallFuture
 ctx.workflow_call(svc, handler, key, arg) → DurableCallFuture
 
-# Fire-and-forget
+# Explicit fire-and-forget
 ctx.service_send(svc, handler, arg, delay: nil) → SendHandle
 ctx.object_send(svc, handler, key, arg, delay: nil) → SendHandle
 ctx.workflow_send(svc, handler, key, arg, delay: nil) → SendHandle
@@ -1161,4 +1316,20 @@ future.cancel
 # SendHandle (from ctx.service_send, etc.)
 handle.invocation_id → String
 handle.cancel
+```
+
+### Middleware
+
+```ruby
+endpoint.use(MyMiddleware)            # Register middleware
+endpoint.use(MyMiddleware, arg: val)  # With constructor args
+```
+
+### HTTP Client (External Invocation)
+
+```ruby
+client = Restate::Client.new("http://localhost:8080")
+client.service(Greeter).greet("World")
+client.object(Counter, "key").add(5)
+client.workflow(UserSignup, "key").run(email)
 ```

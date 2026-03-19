@@ -1,4 +1,4 @@
-# typed: true
+# typed: false
 # frozen_string_literal: true
 
 #
@@ -10,9 +10,11 @@
 #
 # Features:
 #   - main handler          — entry point, runs once per workflow ID
+#   - state :name           — declarative state with auto accessors
 #   - ctx.promise           — block until a signal arrives
 #   - ctx.resolve_promise   — deliver a value to a waiting promise
-#   - ctx.set / ctx.get     — workflow state visible to shared handlers
+#
+# Note: state names must differ from handler names (both generate instance methods).
 #
 # Try it:
 #   # Start the workflow
@@ -27,29 +29,31 @@
 #     -d '"approved by admin"'
 #
 #   # Check status
-#   curl localhost:8080/UserSignup/status \
+#   curl localhost:8080/UserSignup/get_status \
 #     -H 'content-type: application/json' \
 #     -d 'null'
 
 require 'restate'
 
 class UserSignup < Restate::Workflow
+  state :current_status, default: 'unknown'
+
   # @param ctx [Restate::WorkflowContext]
   main def run(ctx, email)
     user_id = ctx.run_sync('create-account') do
       "user_#{email.gsub(/[^a-zA-Z0-9]/, '_')}"
     end
 
-    ctx.set('status', 'waiting_for_approval')
+    self.current_status = 'waiting_for_approval'
 
     # Wait for an external approval signal
     approval = ctx.promise('approval')
-    ctx.set('status', 'approved')
+    self.current_status = 'approved'
 
     # Activate account
     ctx.run_sync('activate') { puts "Activating #{user_id} — #{approval}" }
 
-    ctx.set('status', 'active')
+    self.current_status = 'active'
     { 'user_id' => user_id, 'email' => email, 'approval' => approval }
   end
 
@@ -62,7 +66,7 @@ class UserSignup < Restate::Workflow
 
   # Query handler — returns current workflow status.
   # @param ctx [Restate::WorkflowSharedContext]
-  handler def status(ctx)
-    ctx.get('status') || 'unknown'
+  handler def get_status(_ctx)
+    current_status
   end
 end

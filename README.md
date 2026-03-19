@@ -17,6 +17,18 @@ class Greeter < Restate::Service
     ctx.run_sync('build-greeting') { "Hello, #{name}!" }
   end
 end
+
+class Counter < Restate::VirtualObject
+  state :count, default: 0
+
+  handler def add(ctx, addend)
+    self.count += addend
+  end
+
+  shared def get(ctx)
+    count
+  end
+end
 ```
 
 ## Community
