@@ -19,4 +19,8 @@ group :development, :test do
   gem 'sorbet', require: false
   gem 'tapioca', require: false
   gem 'testcontainers-core', require: false
+
+  # For middleware_example/
+  gem 'opentelemetry-api', require: false
+  gem 'opentelemetry-sdk', require: false
 end

@@ -9,4 +9,5 @@
 --ignore=vendor/
 --ignore=template/
 --ignore=test-services/
+--ignore=middleware_example/
 --ignore=/rbi/

@@ -17,7 +17,6 @@ require_relative 'service_communication'
 require_relative 'typed_handlers'
 require_relative 'typed_handlers_sorbet'
 require_relative 'service_configuration'
-require_relative 'middleware'
 
 endpoint = Restate.endpoint(
   Greeter,
@@ -27,13 +26,7 @@ endpoint = Restate.endpoint(
   Worker, FanOut,
   TicketService,
   EventService,
-  OrderProcessor,
-  MiddlewareDemo
+  OrderProcessor
 )
-
-# Register handler-level middleware (Sidekiq-style)
-endpoint.use(LoggingMiddleware)
-endpoint.use(TenantMiddleware)
-endpoint.use(MetricsMiddleware, prefix: 'examples')
 
 run endpoint.app

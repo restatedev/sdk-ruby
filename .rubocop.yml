@@ -13,6 +13,7 @@ AllCops:
     - "spec/**/*"
     - "tmp/**/*"
     - "vendor/**/*"
+    - "middleware_example/**/*"
 
 Layout/LineLength:
   Max: 120
