@@ -52,14 +52,17 @@ module Restate
       # @param restate_image [String] Docker image for Restate server.
       # @param always_replay [Boolean] Force replay on every suspension point.
       # @param disable_retries [Boolean] Disable Restate retry policy.
+      # @yield [Endpoint] Optional block to configure the endpoint (e.g. add middleware).
       def initialize(*services,
                      restate_image: 'docker.io/restatedev/restate:latest',
                      always_replay: false,
-                     disable_retries: false)
+                     disable_retries: false,
+                     &configure)
         @services = services
         @restate_image = restate_image
         @always_replay = always_replay
         @disable_retries = disable_retries
+        @configure = configure
         @server_thread = nil
         @container = nil
         @port = nil
@@ -69,7 +72,9 @@ module Restate
 
       def start
         @port = find_free_port
-        rack_app = Restate.endpoint(*@services).app
+        endpoint = Restate.endpoint(*@services)
+        @configure&.call(endpoint)
+        rack_app = endpoint.app
         start_sdk_server(rack_app)
         wait_for_tcp(@port)
         start_restate_container

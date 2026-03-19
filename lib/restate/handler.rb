@@ -33,19 +33,32 @@ module Restate
 
   # Invoke a handler with the context and raw input bytes.
   # The context is passed as the first argument to every handler.
+  # Middleware (if any) wraps the handler call.
   # Returns raw output bytes.
-  sig { params(handler: T.untyped, ctx: T.untyped, in_buffer: String).returns(String) }
-  def invoke_handler(handler:, ctx:, in_buffer:)
-    if handler.arity == 2
-      begin
-        in_arg = handler.handler_io.input_serde.deserialize(in_buffer)
-      rescue StandardError => e
-        Kernel.raise TerminalError, "Unable to parse input argument: #{e.message}"
+  sig do
+    params(handler: T.untyped, ctx: T.untyped, in_buffer: String,
+           middleware: T::Array[T.untyped]).returns(String)
+  end
+  def invoke_handler(handler:, ctx:, in_buffer:, middleware: []) # rubocop:disable Metrics/AbcSize
+    call_handler = Kernel.proc do
+      if handler.arity == 2
+        begin
+          in_arg = handler.handler_io.input_serde.deserialize(in_buffer)
+        rescue StandardError => e
+          Kernel.raise TerminalError, "Unable to parse input argument: #{e.message}"
+        end
+        handler.callable.call(ctx, in_arg)
+      else
+        handler.callable.call(ctx)
       end
-      out_arg = handler.callable.call(ctx, in_arg)
-    else
-      out_arg = handler.callable.call(ctx)
     end
+
+    # Build the middleware chain so each middleware can use `yield` to call the next.
+    chain = middleware.reverse.reduce(call_handler) do |nxt, mw|
+      Kernel.proc { mw.call(handler, ctx, &nxt) }
+    end
+
+    out_arg = chain.call
     handler.handler_io.output_serde.serialize(out_arg)
   end
 end

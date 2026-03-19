@@ -28,8 +28,11 @@ module Restate
     sig { returns(T.untyped) }
     attr_reader :invocation
 
-    sig { params(vm: VMWrapper, handler: T.untyped, invocation: T.untyped, send_output: T.untyped, input_queue: Async::Queue).void }
-    def initialize(vm:, handler:, invocation:, send_output:, input_queue:)
+    sig do
+      params(vm: VMWrapper, handler: T.untyped, invocation: T.untyped, send_output: T.untyped,
+             input_queue: Async::Queue, middleware: T::Array[T.untyped]).void
+    end
+    def initialize(vm:, handler:, invocation:, send_output:, input_queue:, middleware: [])
       @vm = T.let(vm, VMWrapper)
       @handler = T.let(handler, T.untyped)
       @invocation = T.let(invocation, T.untyped)
@@ -37,6 +40,7 @@ module Restate
       @input_queue = T.let(input_queue, Async::Queue)
       @run_coros_to_execute = T.let({}, T::Hash[Integer, T.untyped])
       @attempt_finished_event = T.let(AttemptFinishedEvent.new, AttemptFinishedEvent)
+      @middleware = T.let(middleware, T::Array[T.untyped])
     end
 
     # ── Main entry point ──
@@ -48,7 +52,8 @@ module Restate
       Thread.current[:restate_service_kind] = @handler.service_tag.kind
       Thread.current[:restate_handler_kind] = @handler.kind
       in_buffer = @invocation.input_buffer
-      out_buffer = Restate.invoke_handler(handler: @handler, ctx: self, in_buffer: in_buffer)
+      out_buffer = Restate.invoke_handler(handler: @handler, ctx: self, in_buffer: in_buffer,
+                                          middleware: @middleware)
       @vm.sys_write_output_success(out_buffer.b)
       @vm.sys_end
     rescue TerminalError => e
