@@ -95,7 +95,7 @@ class TypedGreeter < Restate::Service
   end
 end
 
-# Middleware that stores the invocation in fiber-local storage so the handler can see it ran.
+# Middleware that stores a header value in fiber-local storage so the handler can read it.
 class TestHeaderMiddleware
   def call(handler, ctx)
     team_id = ctx.request.headers['x-team-id']

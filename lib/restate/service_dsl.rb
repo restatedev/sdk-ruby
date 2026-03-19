@@ -37,8 +37,8 @@ module Restate
     # Declare a durable state entry with auto-generated getter, setter, and clear methods.
     # Only available on VirtualObject and Workflow.
     #
-    # The generated methods delegate to the current Restate context (via fiber-local storage),
-    # so they work correctly across concurrent invocations.
+    # The generated methods delegate to the current Restate context via +Thread.current+
+    # (fiber-scoped in Ruby 3.0+), so they work correctly across concurrent invocations.
     #
     # @param name [Symbol] state key name
     # @param default [Object, nil] default value returned when state is not set
