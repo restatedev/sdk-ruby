@@ -1,0 +1,12 @@
+--dir
+lib/
+--dir
+sorbet/rbi/
+--ignore=template/
+--ignore=test-services/
+--ignore=middleware_example/
+--ignore=spec/
+--ignore=examples/
+--ignore=.bundle/
+--ignore=.gem/
+--suppress-error-code=5002

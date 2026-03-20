@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require 'net/http'
@@ -84,7 +85,7 @@ module Restate
 
     def resolve_name(service)
       if service.is_a?(Class) && service.respond_to?(:service_name)
-        service.service_name
+        service.service_name # steep:ignore NoMethod
       else
         service.to_s
       end
@@ -96,7 +97,7 @@ module Restate
       request['Content-Type'] = 'application/json'
       @ingress_headers.each { |k, v| request[k] = v }
       request.body = JSON.generate(body) if body
-      response = Net::HTTP.start(uri.hostname, uri.port,
+      response = Net::HTTP.start(uri.hostname, uri.port, # steep:ignore ArgumentTypeMismatch
                                  use_ssl: uri.scheme == 'https',
                                  read_timeout: 30) { |http| http.request(request) }
       Kernel.raise "Restate ingress error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
@@ -109,7 +110,7 @@ module Restate
       request['Content-Type'] = 'application/json'
       @admin_headers.each { |k, v| request[k] = v }
       request.body = JSON.generate(body) if body
-      response = Net::HTTP.start(uri.hostname, uri.port,
+      response = Net::HTTP.start(uri.hostname, uri.port, # steep:ignore ArgumentTypeMismatch
                                  use_ssl: uri.scheme == 'https',
                                  read_timeout: 30) { |http| http.request(request) }
       Kernel.raise "Restate admin error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
@@ -141,7 +142,7 @@ module Restate
       request['Content-Type'] = 'application/json'
       @headers.each { |k, v| request[k] = v }
       request.body = JSON.generate(arg)
-      response = Net::HTTP.start(uri.hostname, uri.port,
+      response = Net::HTTP.start(uri.hostname, uri.port, # steep:ignore ArgumentTypeMismatch
                                  use_ssl: uri.scheme == 'https',
                                  read_timeout: 30) { |http| http.request(request) }
       Kernel.raise "Restate ingress error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
