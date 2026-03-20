@@ -11,10 +11,10 @@
 # Features:
 #   - Service.call.handler(arg)  — fluent typed RPC (returns DurableCallFuture)
 #   - Service.send!.handler(arg) — fluent fire-and-forget (optionally delayed)
-#   - ctx.service_call / ctx.service_send — explicit RPC (same thing, verbose)
+#   - Restate.service_call / Restate.service_send — explicit RPC (same thing, verbose)
 #   - Fan-out/fan-in             — launch concurrent calls, collect results
-#   - ctx.wait_any               — race multiple futures, handle first completer
-#   - ctx.awakeable              — pause until an external system calls back
+#   - Restate.wait_any           — race multiple futures, handle first completer
+#   - Restate.awakeable          — pause until an external system calls back
 #
 # Try it:
 #   curl localhost:8080/FanOut/run \
@@ -25,9 +25,8 @@ require 'restate'
 
 # A simple worker that simulates processing a task.
 class Worker < Restate::Service
-  # @param ctx [Restate::Context]
-  handler def process(ctx, task)
-    ctx.run_sync('do-work') do
+  handler def process(task)
+    Restate.run_sync('do-work') do
       { 'task' => task, 'result' => "completed_#{task}" }
     end
   end
@@ -35,8 +34,7 @@ end
 
 # Fan-out: dispatch tasks in parallel, collect all results.
 class FanOut < Restate::Service
-  # @param ctx [Restate::Context]
-  handler def run(_ctx, tasks)
+  handler def run(tasks)
     # Fluent API: launch a call for each task
     futures = tasks.map do |task|
       Worker.call.process(task)
@@ -52,24 +50,22 @@ class FanOut < Restate::Service
   end
 
   # Race two calls and return the first result.
-  # @param ctx [Restate::Context]
-  handler def race(ctx, tasks)
+  handler def race(tasks)
     futures = tasks.map do |task|
       Worker.call.process(task)
     end
 
     # wait_any returns [completed, remaining]
-    completed, _remaining = ctx.wait_any(*futures)
+    completed, _remaining = Restate.wait_any(*futures)
     completed.first.await
   end
 
   # Awakeable: pause until an external system resolves the callback.
-  # @param ctx [Restate::Context]
-  handler def with_callback(ctx, task)
-    awakeable_id, future = ctx.awakeable
+  handler def with_callback(task)
+    awakeable_id, future = Restate.awakeable
 
     # Send the awakeable ID to an external system (via a side effect)
-    ctx.run_sync('notify-external') do
+    Restate.run_sync('notify-external') do
       puts "External system should POST to Restate to resolve: #{awakeable_id}"
     end
 

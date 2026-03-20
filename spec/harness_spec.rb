@@ -21,55 +21,54 @@ end
 
 class TestGreeter < Restate::Service
   handler :greet
-  def greet(ctx, name)
-    ctx.run("build-greeting") { "Hello, #{name}!" }.await
+  def greet(name)
+    Restate.run("build-greeting") { "Hello, #{name}!" }.await
   end
 end
 
 class TestCounter < Restate::VirtualObject
-  handler def add(ctx, addend)
-    old_value = ctx.get("count") || 0
+  handler def add(addend)
+    old_value = Restate.get("count") || 0
     new_value = old_value + addend
-    ctx.set("count", new_value)
+    Restate.set("count", new_value)
     {"oldValue" => old_value, "newValue" => new_value}
   end
 
-  shared def get(ctx)
-    ctx.get("count") || 0
+  shared def get
+    Restate.get("count") || 0
   end
 end
 
 class TestWorker < Restate::Service
-  handler def process(ctx, input)
-    ctx.run("do-work") { "processed:#{input}" }.await
+  handler def process(input)
+    Restate.run("do-work") { "processed:#{input}" }.await
   end
 end
 
 class TestOrchestrator < Restate::Service
-  handler def orchestrate(ctx, input)
-    result = ctx.service_call(TestWorker, :process, input).await
+  handler def orchestrate(input)
+    result = Restate.service_call(TestWorker, :process, input).await
     "orchestrated:#{result}"
   end
 end
 
 class TestRunSync < Restate::Service
-  handler def compute(ctx, input)
-    result = ctx.run_sync("heavy-computation") { input * 2 }
+  handler def compute(input)
+    result = Restate.run_sync("heavy-computation") { input * 2 }
     "result:#{result}"
   end
 end
 
 class TestFiberLocalCtx < Restate::Service
-  handler def process(ctx, input)
-    # Access context via fiber-local accessor from a nested method
+  handler def process(input)
+    # Access Restate API from a nested method via top-level Restate module
     do_work(input)
   end
 
   private
 
   def do_work(input)
-    ctx = Restate.current_context
-    result = ctx.run_sync('step') { "processed:#{input}" }
+    result = Restate.run_sync('step') { "processed:#{input}" }
     "fiber_local:#{result}"
   end
 end
@@ -81,7 +80,7 @@ end
 
 class TStructGreeter < Restate::Service
   handler :greet, input: TStructRequest, output: String
-  def greet(_ctx, request)
+  def greet(request)
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
   end
@@ -89,7 +88,7 @@ end
 
 class TypedGreeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(_ctx, request)
+  def greet(request)
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
   end
@@ -107,7 +106,7 @@ class TestHeaderMiddleware
 end
 
 class MiddlewareTestService < Restate::Service
-  handler def check_header(ctx, _input)
+  handler def check_header
     team = Thread.current[:test_team_id] || 'none'
     "team:#{team}"
   end
@@ -118,15 +117,15 @@ end
 class TestDeclCounter < Restate::VirtualObject
   state :count, default: 0
 
-  handler def add(ctx, addend)
+  handler def add(addend)
     self.count += addend
   end
 
-  shared def get(ctx)
+  shared def get
     count
   end
 
-  handler def reset(ctx)
+  handler def reset
     clear_count
     'reset'
   end
@@ -135,25 +134,25 @@ end
 # ── Fluent call API test services ─────────────────────────────
 
 class TestFluentWorker < Restate::Service
-  handler def process(ctx, task)
-    ctx.run_sync('do-work') { "done:#{task}" }
+  handler def process(task)
+    Restate.run_sync('do-work') { "done:#{task}" }
   end
 end
 
 class TestFluentOrchestrator < Restate::Service
-  handler def orchestrate(ctx, input)
+  handler def orchestrate(input)
     # Use fluent call API
     result = TestFluentWorker.call.process(input).await
     "orchestrated:#{result}"
   end
 
-  handler def fire_and_forget(ctx, input)
+  handler def fire_and_forget(input)
     # Use fluent send API
     TestFluentWorker.send!.process(input)
     'sent'
   end
 
-  handler def call_object(ctx, input)
+  handler def call_object(input)
     # Use fluent call on virtual object
     result = TestDeclCounter.call(input['key']).add(input['value']).await
     "counter:#{result}"
@@ -218,7 +217,7 @@ RSpec.describe Restate::Testing do
     expect(JSON.parse(response.body)).to eq("result:42")
   end
 
-  it "accesses context via Restate.current_context (fiber-local)" do
+  it "accesses Restate API from nested methods via top-level module" do
     response = post_json(@harness.ingress_url, "/TestFiberLocalCtx/process", "hello")
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("fiber_local:processed:hello")

@@ -4,13 +4,13 @@
 #
 # Example: Durable Execution
 #
-# Shows how ctx.run records side-effect results durably.
+# Shows how Restate.run records side-effect results durably.
 # If the handler retries, already-completed steps are skipped
 # and their stored results are replayed — giving exactly-once semantics.
 #
 # Features:
-#   - ctx.run          — durable side effect (returns a future)
-#   - ctx.run_sync     — same, but returns the value directly (no .await needed)
+#   - Restate.run          — durable side effect (returns a future)
+#   - Restate.run_sync     — same, but returns the value directly (no .await needed)
 #   - background: true — offload CPU-heavy work to a real OS Thread
 #   - RunRetryPolicy   — custom retry configuration per side effect
 #   - TerminalError    — non-retryable failure that stops the invocation
@@ -23,14 +23,13 @@
 require 'restate'
 
 class SubscriptionService < Restate::Service
-  # @param ctx [Restate::Context]
-  handler def add(ctx, request)
+  handler def add(request)
     user_id = request['user_id']
     plan = request['plan']
 
     # Step 1 — validate (non-retryable failure if invalid)
     # run_sync returns the value directly — no .await needed
-    ctx.run_sync('validate') do
+    Restate.run_sync('validate') do
       unless %w[basic premium].include?(plan)
         raise Restate::TerminalError.new("Unknown plan: #{plan}", status_code: 400)
       end
@@ -46,13 +45,13 @@ class SubscriptionService < Restate::Service
       max_interval: 5000
     )
 
-    subscription_id = ctx.run_sync('create-subscription', retry_policy: policy) do
+    subscription_id = Restate.run_sync('create-subscription', retry_policy: policy) do
       "sub_#{user_id}_#{plan}_#{rand(10_000)}"
     end
 
     # Step 3 — send confirmation email (background: true offloads to an OS Thread,
     # keeping the fiber event loop free for other handlers)
-    ctx.run_sync('send-confirmation', background: true) do
+    Restate.run_sync('send-confirmation', background: true) do
       puts "Sending confirmation for subscription #{subscription_id}"
     end
 

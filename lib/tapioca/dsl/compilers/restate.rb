@@ -10,8 +10,8 @@ module Tapioca
     module Compilers
       # Generates Sorbet sigs for Restate handler methods.
       #
-      # Every handler receives +ctx+ as its first parameter. Handlers that
-      # accept input receive it as the second parameter (arity 2).
+      # Handlers take 0 or 1 parameters (the input). Context is implicit
+      # via +Restate.*+ module methods.
       #
       # Usage:
       #   bundle exec tapioca dsl
@@ -58,9 +58,8 @@ module Tapioca
         def decorate # rubocop:disable Metrics/MethodLength
           root.create_path(constant) do |klass|
             constant.handlers.each do |name, handler|
-              ctx_type = resolve_context_type(constant, handler)
-              params = [create_param('ctx', type: ctx_type)]
-              if handler.arity == 2
+              params = []
+              if handler.arity == 1
                 input_type = resolve_input_type(handler)
                 params << create_param('input', type: input_type)
               end

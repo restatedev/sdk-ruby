@@ -39,7 +39,7 @@ The SDK is a Rack 3 application designed for Falcon. It wraps the shared Rust
 
 ```
 lib/
-├── restate.rb                       Restate.endpoint, fiber-local context accessors
+├── restate.rb                       Restate.endpoint, Restate.* top-level API, fiber-local context
 └── restate/
     ├── context.rb                   Request = Struct.new(:id, :headers, :body)
     ├── discovery.rb                 Generates discovery JSON manifest
@@ -82,7 +82,7 @@ test-services/                       Integration test services (for sdk-test-sui
 examples/                            Runnable examples showcasing SDK features
 ├── config.ru                        Rackup: loads and serves all examples
 ├── greeter.rb                       Hello World: simplest stateless service
-├── durable_execution.rb             ctx.run, RunRetryPolicy, TerminalError
+├── durable_execution.rb             Restate.run, RunRetryPolicy, TerminalError
 ├── virtual_objects.rb               State ops, handler vs shared
 ├── workflow.rb                      Promises, signals, workflow state
 ├── service_communication.rb         Calls, sends, fan-out, wait_any, awakeables
@@ -162,13 +162,12 @@ This is the most complex part. See [Invocation Execution Flow](#invocation-execu
 
 ### ServerContext (`lib/restate/server_context.rb`)
 
-The context object passed as the first argument to every handler. Implements:
+The context object that backs the `Restate.*` top-level API. Implements:
 
-- **Context delivery** — `enter` passes `self` as the first argument to the handler via
-  `invoke_handler(handler:, ctx: self, in_buffer:)`. The context is also stored in fiber-local
-  storage (`Thread.current[:restate_context]`, `:restate_service_kind`, `:restate_handler_kind`)
-  so that nested helper methods can access it via `Restate.current_context` and the type-specific
-  accessors. Each accessor validates both service kind and handler kind at runtime. The context hierarchy provides type safety:
+- **Context delivery** — `enter` stores `self` in fiber-local storage
+  (`Thread.current[:restate_context]`, `:restate_service_kind`, `:restate_handler_kind`)
+  before invoking the handler via `invoke_handler(handler:, ctx: self, in_buffer:)`.
+  The `Restate.*` module methods delegate to this context. The context hierarchy provides type safety:
   - `Context` — base (run, sleep, calls, awakeables)
   - `ObjectSharedContext` — read-only state (get, state_keys, key)
   - `ObjectContext` — full state (+ set, clear, clear_all)
@@ -211,13 +210,14 @@ The shared class-level DSL included by all service types:
 
 **Handler binding**: The DSL uses `instance_method(name).bind_call(allocate, ...)` pattern. This
 creates a lightweight uninitialized instance for method dispatch. Handlers are stateless — any
-instance state should go through `ctx.get`/`ctx.set`.
+instance state should go through `Restate.get`/`Restate.set`.
 
 ### Handler Dispatch (`lib/restate/handler.rb`)
 
-`Restate.invoke_handler` receives the context and raw input bytes. It always passes `ctx` as the
-first argument. If arity is 2, it also deserializes input via `handler_io.input_serde` and passes
-it as the second argument. Output is serialized via `handler_io.output_serde`.
+`Restate.invoke_handler` receives the context and raw input bytes. The context is stored in
+fiber-local storage (not passed as a parameter). If arity is 1, it deserializes input via
+`handler_io.input_serde` and passes it as the handler's argument. If arity is 0, the handler
+receives no arguments. Output is serialized via `handler_io.output_serde`.
 
 **Data structures:**
 - `ServiceTag` = `Struct.new(:kind, :name, :description, :metadata)`
@@ -229,24 +229,24 @@ it as the second argument. Output is serialized via `handler_io.output_serde`.
 
 Three classes for async result handling:
 
-**`DurableFuture`** — returned by `ctx.sleep`, `ctx.run`, promise operations.
-- `await` — first call resolves via `ctx.resolve_handle(handle)`, subsequent calls return cached value
-- `completed?` — non-blocking check via `ctx.completed?(handle)`
+**`DurableFuture`** — returned by `Restate.sleep`, `Restate.run`, promise operations.
+- `await` — first call resolves via the internal context's `resolve_handle(handle)`, subsequent calls return cached value
+- `completed?` — non-blocking check via the internal context's `completed?(handle)`
 - `handle` — the raw VM notification handle (Integer)
 
-**`DurableCallFuture` < `DurableFuture`** — returned by `ctx.service_call`, `ctx.object_call`, `ctx.workflow_call`.
+**`DurableCallFuture` < `DurableFuture`** — returned by `Restate.service_call`, `Restate.object_call`, `Restate.workflow_call`.
 - Two handles: `result_handle` (for await) and `invocation_id_handle` (for ID)
 - `invocation_id` — lazily resolved on first access
-- `cancel` — calls `ctx.cancel_invocation(invocation_id)`
+- `cancel` — calls `Restate.cancel_invocation(invocation_id)`
 
-**`SendHandle`** — returned by `ctx.service_send`, `ctx.object_send`, `ctx.workflow_send`.
+**`SendHandle`** — returned by `Restate.service_send`, `Restate.object_send`, `Restate.workflow_send`.
 - `invocation_id` — lazily resolved
-- `cancel` — calls `ctx.cancel_invocation(invocation_id)`
+- `cancel` — calls `Restate.cancel_invocation(invocation_id)`
 - No `await` (fire-and-forget)
 
 ### AttemptFinishedEvent
 
-Available via `ctx.request.attempt_finished_event`. Signals when the current invocation attempt
+Available via `Restate.request.attempt_finished_event`. Signals when the current invocation attempt
 is about to finish (e.g., connection closing). Two methods:
 
 - **`set?`** — non-blocking check, returns `true` if the attempt has finished.
@@ -359,9 +359,9 @@ Async task:
         ▼
     invoke_handler(handler, ctx, input_buffer)
         │
-        ▼ (handler calls ctx.get, ctx.run, ctx.service_call, etc.)
+        ▼ (handler calls Restate.get, Restate.run, Restate.service_call, etc.)
         │
-    Each ctx method calls vm.sys_* then poll_and_take(handle)
+    Each Restate.* method calls vm.sys_* then poll_and_take(handle)
         │
         ▼
     poll_or_cancel (progress loop)
@@ -484,7 +484,7 @@ the same fiber chain (which is guaranteed by Async's cooperative scheduling).
 
 ## Typed Call Resolution
 
-When a handler calls `ctx.service_call(Worker, :process, arg)`, the `resolve_call_target` method:
+When a handler calls `Restate.service_call(Worker, :process, arg)`, the `resolve_call_target` method:
 
 1. Checks if `service` is a Class with `respond_to?(:service_name)`
 2. If yes: extracts `service.service_name`, looks up `service.handlers[handler_name]` for metadata
@@ -502,7 +502,7 @@ registration options. When you pass strings, it always uses `JsonSerde`.
 
 ## Run Execution (Durable Side Effects)
 
-When user code calls `ctx.run('name') { ... }`:
+When user code calls `Restate.run('name') { ... }`:
 
 1. `sys_run(name)` registers the run with the VM, returns a handle
 2. The action block is stored in `@run_coros_to_execute[handle]`
@@ -522,11 +522,11 @@ When user code calls `ctx.run('name') { ... }`:
 ### Background Runs (`background: true`)
 
 With Async 2.x and Ruby 3.1+, the Fiber Scheduler intercepts most blocking I/O automatically
-(Net::HTTP, TCPSocket, file reads, etc.), so `ctx.run` already handles I/O-bound work without
+(Net::HTTP, TCPSocket, file reads, etc.), so `Restate.run` already handles I/O-bound work without
 blocking the event loop. `background: true` is only needed for CPU-heavy native extensions
 that release the GVL (e.g., image processing with libvips, crypto with OpenSSL).
 
-`ctx.run('name', background: true) { ... }` offloads the block to `BackgroundPool`, a shared
+`Restate.run('name', background: true) { ... }` offloads the block to `BackgroundPool`, a shared
 fixed-size thread pool (default 8 workers, configurable via `RESTATE_BACKGROUND_POOL_SIZE`).
 
 The mechanism uses `offload_to_thread`:
@@ -539,7 +539,7 @@ The mechanism uses `offload_to_thread`:
 
 ### `run_sync`
 
-`ctx.run_sync(...)` is a convenience shortcut for `ctx.run(...).await`. It accepts all the
+`Restate.run_sync(...)` is a convenience shortcut for `Restate.run(...).await`. It accepts all the
 same parameters (including `background: true`) and returns the value directly.
 
 ---

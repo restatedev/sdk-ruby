@@ -15,8 +15,8 @@ of ordinary Ruby code.
 require 'restate'
 
 class Greeter < Restate::Service
-  handler def greet(ctx, name)
-    ctx.run_sync('build-greeting') { "Hello, #{name}!" }
+  handler def greet(name)
+    Restate.run_sync('build-greeting') { "Hello, #{name}!" }
   end
 end
 
@@ -57,8 +57,8 @@ Stateless handlers that can be invoked by name. Each invocation is independent.
 
 ```ruby
 class MyService < Restate::Service
-  handler def my_handler(ctx, input)
-    # ctx is the Restate context; input is the deserialized JSON body
+  handler def my_handler(input)
+    # input is the deserialized JSON body
     # return value is serialized as the JSON response
     { 'result' => input }
   end
@@ -75,17 +75,17 @@ Each virtual object instance is identified by a key and has durable K/V state sc
 class Counter < Restate::VirtualObject
   state :count, default: 0    # Declarative state with auto-generated accessors
 
-  handler def add(ctx, amount)
-    self.count += amount       # Reads via ctx.get, writes via ctx.set
+  handler def add(amount)
+    self.count += amount       # Reads via Restate.get, writes via Restate.set
   end
 
-  shared def get(ctx)
+  shared def get
     count                      # Returns 0 when unset (the default)
   end
 end
 ```
 
-You can also use `ctx.get`/`ctx.set` directly — see [State Operations](#state-operations).
+You can also use `Restate.get`/`Restate.set` directly — see [State Operations](#state-operations).
 
 **Invoke**: `POST /Counter/my-counter/add` (key is `my-counter`)
 
@@ -96,22 +96,22 @@ query state and send signals.
 
 ```ruby
 class UserSignup < Restate::Workflow
-  main def run(ctx, email)
-    user_id = ctx.run_sync('create-account') { create_user(email) }
-    ctx.set('status', 'waiting_for_approval')
+  main def run(email)
+    user_id = Restate.run_sync('create-account') { create_user(email) }
+    Restate.set('status', 'waiting_for_approval')
 
     # Block until approve() is called
-    approval = ctx.promise('approval')
-    ctx.set('status', 'active')
+    approval = Restate.promise('approval')
+    Restate.set('status', 'active')
     { 'user_id' => user_id, 'approval' => approval }
   end
 
-  handler def approve(ctx, reason)
-    ctx.resolve_promise('approval', reason)
+  handler def approve(reason)
+    Restate.resolve_promise('approval', reason)
   end
 
-  handler def status(ctx)
-    ctx.get('status') || 'unknown'
+  handler def status
+    Restate.get('status') || 'unknown'
   end
 end
 ```
@@ -127,19 +127,19 @@ curl localhost:8080/UserSignup/user42/status -d 'null'
 
 ## Context API Reference
 
-The context object provides access to all Restate operations. It is passed as the first argument
-to every handler:
+All Restate operations are available as top-level module methods on `Restate`. Inside a handler,
+call `Restate.run_sync`, `Restate.sleep`, `Restate.get`, etc. directly:
 
 ```ruby
-handler def greet(ctx, name)      # ctx is always the first parameter
-  ctx.run_sync('step') { ... }
+handler def greet(name)
+  Restate.run_sync('step') { ... }
 end
 ```
 
 All operations that interact with Restate return durable results — if the handler crashes and
 retries, completed operations are replayed from the journal without re-executing.
 
-### Durable Execution (`ctx.run`)
+### Durable Execution (`Restate.run`)
 
 Execute a side effect exactly once. The result is durably recorded — on retry, the block is
 skipped and the stored result is returned.
@@ -149,11 +149,11 @@ the value directly:
 
 ```ruby
 # Returns a future — useful for fan-out (see below)
-future = ctx.run('step-name') { do_something() }
+future = Restate.run('step-name') { do_something() }
 result = future.await
 
 # Returns the value directly — convenient for sequential steps
-result = ctx.run_sync('step-name') { do_something() }
+result = Restate.run_sync('step-name') { do_something() }
 ```
 
 **With retry policy:**
@@ -166,12 +166,12 @@ policy = Restate::RunRetryPolicy.new(
   max_duration: 60_000       # ms total duration cap
 )
 
-result = ctx.run_sync('flaky-call', retry_policy: policy) { call_external_api() }
+result = Restate.run_sync('flaky-call', retry_policy: policy) { call_external_api() }
 ```
 
 **Terminal errors** (non-retryable):
 ```ruby
-ctx.run_sync('validate') do
+Restate.run_sync('validate') do
   raise Restate::TerminalError.new('invalid input', status_code: 400)
 end
 ```
@@ -189,7 +189,7 @@ image processing, crypto). The block runs in a shared thread pool (default 8 wor
 configurable via `RESTATE_BACKGROUND_POOL_SIZE`):
 
 ```ruby
-result = ctx.run_sync('resize-image', background: true) { process_image(data) }
+result = Restate.run_sync('resize-image', background: true) { process_image(data) }
 ```
 
 ### Declarative State
@@ -201,15 +201,15 @@ getter, setter, and clear methods that delegate to the context automatically.
 class Counter < Restate::VirtualObject
   state :count, default: 0
 
-  handler def add(ctx, addend)
-    self.count += addend     # getter reads ctx.get('count'), setter calls ctx.set('count', ...)
+  handler def add(addend)
+    self.count += addend     # getter reads Restate.get('count'), setter calls Restate.set('count', ...)
   end
 
-  shared def get(ctx)
+  shared def get
     count                    # returns 0 when state is unset
   end
 
-  handler def reset(ctx)
+  handler def reset
     clear_count              # removes the state entry
   end
 end
@@ -220,27 +220,27 @@ end
 - `serde:` — custom serializer/deserializer (default: `JsonSerde`)
 
 **Note:** State names must differ from handler names, since both generate instance methods on
-the same class. If you need the same name, use `ctx.get`/`ctx.set` directly.
+the same class. If you need the same name, use `Restate.get`/`Restate.set` directly.
 
 ### State Operations
 
-You can also manage state explicitly via the context. Available in `VirtualObject` and `Workflow`
-handlers.
+You can also manage state explicitly via the `Restate` module methods. Available in `VirtualObject`
+and `Workflow` handlers.
 
 ```ruby
-value = ctx.get('key')              # Read state (nil if absent)
-ctx.set('key', value)               # Write state
-ctx.clear('key')                    # Delete one key
-ctx.clear_all                       # Delete all keys
-keys = ctx.state_keys               # List all key names
+value = Restate.get('key')              # Read state (nil if absent)
+Restate.set('key', value)               # Write state
+Restate.clear('key')                    # Delete one key
+Restate.clear_all                       # Delete all keys
+keys = Restate.state_keys               # List all key names
 ```
 
 **Async variants** — return a `DurableFuture` instead of blocking, useful for fan-out:
 
 ```ruby
-future_a = ctx.get_async('key_a')
-future_b = ctx.get_async('key_b')
-keys_future = ctx.state_keys_async
+future_a = Restate.get_async('key_a')
+future_b = Restate.get_async('key_b')
+keys_future = Restate.state_keys_async
 
 # Await results (fetches happen concurrently)
 val_a = future_a.await
@@ -251,15 +251,15 @@ keys = keys_future.await
 Values are JSON-serialized by default. Pass `serde:` for custom serialization:
 
 ```ruby
-ctx.get('key', serde: Restate::BytesSerde)
-ctx.get_async('key', serde: Restate::BytesSerde)
-ctx.set('key', raw_bytes, serde: Restate::BytesSerde)
+Restate.get('key', serde: Restate::BytesSerde)
+Restate.get_async('key', serde: Restate::BytesSerde)
+Restate.set('key', raw_bytes, serde: Restate::BytesSerde)
 ```
 
 ### Sleep
 
 ```ruby
-ctx.sleep(5.0).await                # Sleep for 5 seconds (durable timer)
+Restate.sleep(5.0).await                # Sleep for 5 seconds (durable timer)
 ```
 
 The timer survives crashes — if the handler restarts, it resumes waiting for the remaining time.
@@ -282,27 +282,27 @@ Counter.send!("my-key").add(5)                        # VirtualObject
 Worker.send!(delay: 60).process('cleanup')            # Delayed send
 ```
 
-Under the hood this delegates to `ctx.service_call`/`ctx.object_call`/etc. — the fluent API
+Under the hood this delegates to `Restate.service_call`/`Restate.object_call`/etc. — the fluent API
 is pure syntactic sugar with no behavior difference.
 
 #### Explicit Calls
 
 For full control over options (idempotency keys, custom headers, serde overrides), use the
-context methods directly:
+`Restate` module methods directly:
 
 ```ruby
 # Typed call (resolves serdes from target handler registration)
-result = ctx.service_call(MyService, :my_handler, arg).await
-result = ctx.object_call(Counter, :add, 'my-key', 5).await
-result = ctx.workflow_call(UserSignup, :run, 'user42', email).await
+result = Restate.service_call(MyService, :my_handler, arg).await
+result = Restate.object_call(Counter, :add, 'my-key', 5).await
+result = Restate.workflow_call(UserSignup, :run, 'user42', email).await
 
 # String-based call (uses JsonSerde)
-result = ctx.service_call('MyService', 'my_handler', arg).await
+result = Restate.service_call('MyService', 'my_handler', arg).await
 ```
 
 **DurableCallFuture methods:**
 ```ruby
-future = ctx.service_call(MyService, :handler, arg)
+future = Restate.service_call(MyService, :handler, arg)
 result = future.await                # Block until result
 id = future.invocation_id            # Get invocation ID
 future.cancel                        # Cancel the remote invocation
@@ -313,11 +313,11 @@ future.cancel                        # Cancel the remote invocation
 Dispatch a call without waiting for the result.
 
 ```ruby
-handle = ctx.service_send(MyService, :handler, arg)
-handle = ctx.object_send(Counter, :add, 'my-key', 5)
+handle = Restate.service_send(MyService, :handler, arg)
+handle = Restate.object_send(Counter, :add, 'my-key', 5)
 
 # Delayed send (executes after 60 seconds)
-handle = ctx.service_send(MyService, :handler, arg, delay: 60.0)
+handle = Restate.service_send(MyService, :handler, arg, delay: 60.0)
 ```
 
 **SendHandle methods:**
@@ -331,7 +331,7 @@ handle.cancel                        # Cancel the invocation
 All call/send methods accept these keyword arguments:
 
 ```ruby
-ctx.service_call(
+Restate.service_call(
   MyService, :handler, arg,
   idempotency_key: 'unique-key',     # Deduplication key
   headers: { 'x-custom' => 'val' },  # Custom headers
@@ -346,7 +346,7 @@ Launch multiple calls concurrently, then collect all results.
 
 ```ruby
 # Fan-out: launch calls
-futures = tasks.map { |t| ctx.service_call(Worker, :process, t) }
+futures = tasks.map { |t| Restate.service_call(Worker, :process, t) }
 
 # Fan-in: await all
 results = futures.map(&:await)
@@ -357,10 +357,10 @@ results = futures.map(&:await)
 Wait for the first future to complete out of several.
 
 ```ruby
-future_a = ctx.service_call(ServiceA, :slow, arg)
-future_b = ctx.service_call(ServiceB, :fast, arg)
+future_a = Restate.service_call(ServiceA, :slow, arg)
+future_b = Restate.service_call(ServiceB, :fast, arg)
 
-completed, remaining = ctx.wait_any(future_a, future_b)
+completed, remaining = Restate.wait_any(future_a, future_b)
 winner = completed.first.await
 ```
 
@@ -370,10 +370,10 @@ Pause a handler until an external system calls back via Restate's API.
 
 ```ruby
 # In your handler: create an awakeable
-awakeable_id, future = ctx.awakeable
+awakeable_id, future = Restate.awakeable
 
 # Send the ID to an external system
-ctx.run_sync('notify') { send_to_external_system(awakeable_id) }
+Restate.run_sync('notify') { send_to_external_system(awakeable_id) }
 
 # Block until the external system resolves it
 result = future.await
@@ -387,8 +387,8 @@ curl -X POST http://restate:8080/restate/awakeables/$AWAKEABLE_ID/resolve \
 
 **From another handler:**
 ```ruby
-ctx.resolve_awakeable(awakeable_id, payload)
-ctx.reject_awakeable(awakeable_id, 'reason', code: 500)
+Restate.resolve_awakeable(awakeable_id, payload)
+Restate.reject_awakeable(awakeable_id, 'reason', code: 500)
 ```
 
 ### Promises (Workflow Only)
@@ -397,92 +397,45 @@ Durable promises allow communication between a workflow's main handler and its s
 
 ```ruby
 # In main handler: block until promise is resolved
-value = ctx.promise('approval')
+value = Restate.promise('approval')
 
 # In signal handler: resolve the promise
-ctx.resolve_promise('approval', value)
+Restate.resolve_promise('approval', value)
 
 # Non-blocking peek (returns nil if not yet resolved)
-value = ctx.peek_promise('approval')
+value = Restate.peek_promise('approval')
 
 # Reject a promise
-ctx.reject_promise('approval', 'denied', code: 400)
+Restate.reject_promise('approval', 'denied', code: 400)
 ```
 
 ### Request Metadata
 
 ```ruby
-request = ctx.request
+request = Restate.request
 request.id         # Invocation ID (String)
 request.headers    # Request headers (Hash)
 request.body       # Raw input bytes (String)
 
-key = ctx.key      # Object/workflow key (String)
+key = Restate.key  # Object/workflow key (String)
 ```
 
 #### Attempt Finished Event
 
-The `attempt_finished_event` on `ctx.request` signals when the current attempt is about to finish
+The `attempt_finished_event` on `Restate.request` signals when the current attempt is about to finish
 (e.g., the connection is closing). This is useful for long-running handlers that need to perform
 cleanup or flush work before the attempt ends.
 
 ```ruby
-event = ctx.request.attempt_finished_event
+event = Restate.request.attempt_finished_event
 event.set?    # Non-blocking check: has the attempt finished? (true/false)
 event.wait    # Blocks the current fiber until the attempt finishes
 ```
 
-### Accessing the Context
-
-The context is passed as the first argument to every handler. For nested helper methods that
-don't have `ctx` in scope, you can use the fiber-local accessors:
-
-```ruby
-class OrderService < Restate::Service
-  handler def process(ctx, order)
-    validate(order)
-    fulfill(order)
-  end
-
-  private
-
-  def validate(order)
-    # Fiber-local accessor — works from any method within the handler's fiber
-    ctx = Restate.current_context
-    ctx.run_sync('validate') { check_inventory(order) }
-  end
-
-  def fulfill(order)
-    ctx = Restate.current_context
-    ctx.run_sync('fulfill') { ship_order(order) }
-  end
-end
-```
-
-The following fiber-local accessors are available, each returning the appropriately-typed context:
-
-| Accessor | Returns | Use in |
-|----------|---------|--------|
-| `Restate.current_context` | `Context` | Any handler |
-| `Restate.current_object_context` | `ObjectContext` | VirtualObject exclusive handlers (full state) |
-| `Restate.current_shared_context` | `ObjectSharedContext` | VirtualObject shared handlers (read-only state) |
-| `Restate.current_workflow_context` | `WorkflowContext` | Workflow `main` handler (full state + promises) |
-| `Restate.current_shared_workflow_context` | `WorkflowSharedContext` | Workflow shared handlers (read-only state + promises) |
-
-Shared contexts (`ObjectSharedContext`, `WorkflowSharedContext`) expose `get` and `state_keys`
-but NOT `set`, `clear`, or `clear_all` — shared handlers have read-only access to state.
-
-**Runtime validation**: Calling the wrong accessor for your handler type (e.g.,
-`Restate.current_object_context` from a Service handler) raises an error. Calling any accessor
-outside a handler also raises.
-
-**Implementation**: These use fiber-local storage (`Thread.current[:key]`, which is fiber-scoped
-in Ruby). The context is set automatically when a handler begins and cleared when it returns.
-
 ### Cancel Invocation
 
 ```ruby
-ctx.cancel_invocation(invocation_id)
+Restate.cancel_invocation(invocation_id)
 ```
 
 ---
@@ -494,13 +447,13 @@ ctx.cancel_invocation(invocation_id)
 ```ruby
 class MyService < Restate::Service
   # Inline decorator style
-  handler def greet(ctx, name)
+  handler def greet(name)
     "Hello, #{name}!"
   end
 
   # With options
   handler :process, input: String, output: Hash
-  def process(ctx, input)
+  def process(input)
     { 'result' => input.upcase }
   end
 end
@@ -563,15 +516,14 @@ end
 
 ### Handler Arity
 
-Every handler receives `ctx` as its first parameter. An optional second parameter receives the
-deserialized input:
+Handlers receive an optional input parameter with the deserialized request body:
 
 ```ruby
-handler def no_input(ctx)              # Called with null/empty body
+handler def no_input                   # Called with null/empty body
   'ok'
 end
 
-handler def with_input(ctx, data)      # data = deserialized JSON body
+handler def with_input(data)           # data = deserialized JSON body
   data['name']
 end
 ```
@@ -610,7 +562,7 @@ class OrderProcessor < Restate::VirtualObject
                           exponentiation_factor: 2.0,
                           on_max_attempts: :kill
 
-  handler def process(ctx, order)
+  handler def process(order)
     # ...
   end
 end
@@ -705,8 +657,8 @@ endpoint.use(AuthMiddleware, api_key: 'secret')
 - `handler.name` — handler method name
 - `handler.service_tag.name` — service name
 - `handler.service_tag.kind` — `"service"`, `"object"`, or `"workflow"`
-- `ctx.request.id` — invocation ID
-- `ctx.request.headers` — request headers
+- `Restate.request.id` — invocation ID
+- `Restate.request.headers` — request headers
 
 Middleware executes in registration order. Each wraps the next, forming an onion around the handler.
 
@@ -738,7 +690,7 @@ end
 
 class Greeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(ctx, request)
+  def greet(request)
     # request is a GreetingRequest instance, not a raw Hash
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
@@ -785,7 +737,7 @@ end
 
 class Greeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
-  def greet(ctx, request)
+  def greet(request)
     # request is a GreetingRequest instance, not a raw Hash
     greeting = request.greeting || "Hello"
     "#{greeting}, #{request.name}!"
@@ -880,7 +832,7 @@ Terminal errors propagate through service calls:
 
 ```ruby
 begin
-  ctx.service_call(OtherService, :handler, arg).await
+  Restate.service_call(OtherService, :handler, arg).await
 rescue Restate::TerminalError => e
   e.message       # Error message
   e.status_code   # HTTP status code
@@ -900,14 +852,14 @@ Restate automatically retries with exponential backoff.
 ```ruby
 # BAD — catches SuspendedError
 begin
-  result = ctx.service_call(Other, :handler, arg).await
+  result = Restate.service_call(Other, :handler, arg).await
 rescue => e
   handle_error(e)
 end
 
 # GOOD — catch only what you mean
 begin
-  result = ctx.service_call(Other, :handler, arg).await
+  result = Restate.service_call(Other, :handler, arg).await
 rescue Restate::TerminalError => e
   handle_error(e)
 end
@@ -923,26 +875,8 @@ The SDK works out of the box with [Ruby LSP](https://github.com/Shopify/ruby-lsp
 Install the **Ruby LSP** extension and you'll get code completion, hover docs, and
 go-to-definition for all Restate types — no extra setup needed.
 
-Add YARD `@param` tags to your handlers for full context completion:
-
-```ruby
-class Greeter < Restate::Service
-  # @param ctx [Restate::Context]
-  handler def greet(ctx, name)
-    ctx.run_sync('step') { "Hello, #{name}!" }
-  end
-end
-```
-
-Context types by service type:
-
-| Service type | Handler kind | Context type |
-|---|---|---|
-| `Service` | `handler` | `Restate::Context` |
-| `VirtualObject` | `handler` (exclusive) | `Restate::ObjectContext` |
-| `VirtualObject` | `shared` | `Restate::ObjectSharedContext` |
-| `Workflow` | `main` | `Restate::WorkflowContext` |
-| `Workflow` | `handler` (shared) | `Restate::WorkflowSharedContext` |
+Since all Restate operations are called as `Restate.*` module methods, code completion works
+automatically without any YARD annotations.
 
 ### Sorbet + Tapioca (Optional)
 
@@ -971,13 +905,13 @@ This creates RBI files under `sorbet/rbi/`. For example, given:
 
 ```ruby
 class Counter < Restate::VirtualObject
-  handler def add(ctx, addend)
-    old = ctx.get('count') || 0
-    ctx.set('count', old + addend)
+  handler def add(addend)
+    old = Restate.get('count') || 0
+    Restate.set('count', old + addend)
   end
 
-  shared def get(ctx)
-    ctx.get('count') || 0
+  shared def get
+    Restate.get('count') || 0
   end
 end
 ```
@@ -987,11 +921,11 @@ Tapioca generates:
 ```ruby
 # sorbet/rbi/dsl/counter.rbi (auto-generated, do not edit)
 class Counter
-  sig { params(ctx: Restate::ObjectContext, input: T.untyped).returns(T.untyped) }
-  def add(ctx, input); end
+  sig { params(input: T.untyped).returns(T.untyped) }
+  def add(input); end
 
-  sig { params(ctx: Restate::ObjectSharedContext).returns(T.untyped) }
-  def get(ctx); end
+  sig { returns(T.untyped) }
+  def get; end
 end
 ```
 
@@ -1031,7 +965,7 @@ client = Restate::Client.new("http://localhost:8080", headers: {
 ```
 
 **Note:** The client is for external invocation only. Inside a handler, use the fluent call API
-or `ctx.service_call` — these are durable and survive crashes.
+or `Restate.service_call` — these are durable and survive crashes.
 
 ---
 
@@ -1180,7 +1114,7 @@ The `examples/` directory contains runnable examples:
 | File | Shows |
 |------|-------|
 | `greeter.rb` | Hello World: simplest stateless service |
-| `durable_execution.rb` | `ctx.run`, `ctx.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
+| `durable_execution.rb` | `Restate.run`, `Restate.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
 | `virtual_objects.rb` | Declarative state, `handler` vs `shared`, `state_keys`, `clear_all` |
 | `workflow.rb` | Declarative state, promises, signals |
 | `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, awakeables |
@@ -1204,24 +1138,24 @@ restate deployments register http://localhost:9080
 
 ```ruby
 class MyService < Restate::Service
-  handler def method(ctx, arg)
-    # ctx is always the first parameter
+  handler def method(arg)
+    # Use Restate.* methods for all operations
   end
 end
 
 class MyObject < Restate::VirtualObject
   state :count, default: 0                       # Declarative state
-  handler def exclusive_method(ctx, arg)         # One at a time per key
+  handler def exclusive_method(arg)              # One at a time per key
   end
-  shared def concurrent_method(ctx)              # Many readers
+  shared def concurrent_method                   # Many readers
   end
 end
 
 class MyWorkflow < Restate::Workflow
   state :status, default: 'pending'              # Declarative state
-  main def run(ctx, arg)                         # Runs once per key
+  main def run(arg)                              # Runs once per key
   end
-  handler def query(ctx)                         # Shared handler
+  handler def query                              # Shared handler
   end
 end
 ```
@@ -1234,87 +1168,77 @@ state :name, default: nil, serde: nil  # class-level macro
 self.name / self.name= / clear_name   # generated instance methods
 
 # Explicit state (VirtualObject / Workflow)
-ctx.get(name) → value | nil
-ctx.get_async(name) → DurableFuture
-ctx.set(name, value)
-ctx.clear(name)
-ctx.clear_all
-ctx.state_keys → Array[String]
-ctx.state_keys_async → DurableFuture
+Restate.get(name) -> value | nil
+Restate.get_async(name) -> DurableFuture
+Restate.set(name, value)
+Restate.clear(name)
+Restate.clear_all
+Restate.state_keys -> Array[String]
+Restate.state_keys_async -> DurableFuture
 
 # Durable execution
-ctx.run(name, background: false) { block } → DurableFuture
-ctx.run_sync(name, background: false) { block } → value   # run + await
-ctx.sleep(seconds) → DurableFuture
+Restate.run(name, background: false) { block } -> DurableFuture
+Restate.run_sync(name, background: false) { block } -> value   # run + await
+Restate.sleep(seconds) -> DurableFuture
 
 # Fluent service calls (recommended)
-MyService.call.handler(arg) → DurableCallFuture
-MyObject.call("key").handler(arg) → DurableCallFuture
-MyWorkflow.call("key").handler(arg) → DurableCallFuture
+MyService.call.handler(arg) -> DurableCallFuture
+MyObject.call("key").handler(arg) -> DurableCallFuture
+MyWorkflow.call("key").handler(arg) -> DurableCallFuture
 
 # Fluent fire-and-forget
-MyService.send!.handler(arg) → SendHandle
-MyObject.send!("key").handler(arg) → SendHandle
-MyService.send!(delay: 60).handler(arg) → SendHandle
+MyService.send!.handler(arg) -> SendHandle
+MyObject.send!("key").handler(arg) -> SendHandle
+MyService.send!(delay: 60).handler(arg) -> SendHandle
 
 # Explicit service calls
-ctx.service_call(svc, handler, arg) → DurableCallFuture
-ctx.object_call(svc, handler, key, arg) → DurableCallFuture
-ctx.workflow_call(svc, handler, key, arg) → DurableCallFuture
+Restate.service_call(svc, handler, arg) -> DurableCallFuture
+Restate.object_call(svc, handler, key, arg) -> DurableCallFuture
+Restate.workflow_call(svc, handler, key, arg) -> DurableCallFuture
 
 # Explicit fire-and-forget
-ctx.service_send(svc, handler, arg, delay: nil) → SendHandle
-ctx.object_send(svc, handler, key, arg, delay: nil) → SendHandle
-ctx.workflow_send(svc, handler, key, arg, delay: nil) → SendHandle
+Restate.service_send(svc, handler, arg, delay: nil) -> SendHandle
+Restate.object_send(svc, handler, key, arg, delay: nil) -> SendHandle
+Restate.workflow_send(svc, handler, key, arg, delay: nil) -> SendHandle
 
 # Awakeables
-ctx.awakeable → [id, DurableFuture]
-ctx.resolve_awakeable(id, payload)
-ctx.reject_awakeable(id, message, code: 500)
+Restate.awakeable -> [id, DurableFuture]
+Restate.resolve_awakeable(id, payload)
+Restate.reject_awakeable(id, message, code: 500)
 
 # Promises (Workflow only)
-ctx.promise(name) → value           # Blocks until resolved
-ctx.peek_promise(name) → value | nil
-ctx.resolve_promise(name, payload)
-ctx.reject_promise(name, message, code: 500)
+Restate.promise(name) -> value           # Blocks until resolved
+Restate.peek_promise(name) -> value | nil
+Restate.resolve_promise(name, payload)
+Restate.reject_promise(name, message, code: 500)
 
 # Futures
-ctx.wait_any(*futures) → [completed, remaining]
+Restate.wait_any(*futures) -> [completed, remaining]
 
 # Metadata
-ctx.request → Request{id, headers, body}
-ctx.request.attempt_finished_event → AttemptFinishedEvent
-ctx.key → String
+Restate.request -> Request{id, headers, body}
+Restate.request.attempt_finished_event -> AttemptFinishedEvent
+Restate.key -> String
 
 # Cancellation
-ctx.cancel_invocation(invocation_id)
-```
-
-### Fiber-Local Context Accessors
-
-```ruby
-Restate.current_context                  # → Context (any handler)
-Restate.current_object_context           # → ObjectContext (exclusive — full state)
-Restate.current_shared_context           # → ObjectSharedContext (shared — read-only state)
-Restate.current_workflow_context         # → WorkflowContext (main — full state + promises)
-Restate.current_shared_workflow_context  # → WorkflowSharedContext (shared — read-only + promises)
+Restate.cancel_invocation(invocation_id)
 ```
 
 ### Future Methods
 
 ```ruby
-# DurableFuture (from ctx.run, ctx.sleep)
-future.await → value
-future.completed? → bool
+# DurableFuture (from Restate.run, Restate.sleep)
+future.await -> value
+future.completed? -> bool
 
-# DurableCallFuture (from ctx.service_call, etc.)
-future.await → value
-future.completed? → bool
-future.invocation_id → String
+# DurableCallFuture (from Restate.service_call, etc.)
+future.await -> value
+future.completed? -> bool
+future.invocation_id -> String
 future.cancel
 
-# SendHandle (from ctx.service_send, etc.)
-handle.invocation_id → String
+# SendHandle (from Restate.service_send, etc.)
+handle.invocation_id -> String
 handle.cancel
 ```
 

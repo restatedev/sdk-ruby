@@ -41,19 +41,20 @@ module Restate
   end
   def invoke_handler(handler:, ctx:, in_buffer:, middleware: []) # rubocop:disable Metrics/AbcSize
     call_handler = Kernel.proc do
-      if handler.arity == 2
+      if handler.arity == 1
         begin
           in_arg = handler.handler_io.input_serde.deserialize(in_buffer)
         rescue StandardError => e
           Kernel.raise TerminalError, "Unable to parse input argument: #{e.message}"
         end
-        handler.callable.call(ctx, in_arg)
+        handler.callable.call(in_arg)
       else
-        handler.callable.call(ctx)
+        handler.callable.call
       end
     end
 
     # Build the middleware chain so each middleware can use `yield` to call the next.
+    # Middleware still receives (handler, ctx) for low-level access.
     chain = middleware.reverse.reduce(call_handler) do |nxt, mw|
       Kernel.proc { mw.call(handler, ctx, &nxt) }
     end
