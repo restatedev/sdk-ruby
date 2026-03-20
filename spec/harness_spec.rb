@@ -329,17 +329,26 @@ RSpec.describe Restate::Testing do
   # ── HTTP Client ──
 
   it "invokes a service via Restate::Client" do
-    client = Restate::Client.new(@harness.ingress_url)
+    client = Restate::Client.new(ingress_url: @harness.ingress_url)
     result = client.service("TestGreeter").greet("ClientTest")
     expect(result).to eq("Hello, ClientTest!")
   end
 
   it "invokes a virtual object via Restate::Client" do
     key = SecureRandom.hex(8)
-    client = Restate::Client.new(@harness.ingress_url)
+    client = Restate::Client.new(ingress_url: @harness.ingress_url)
 
     client.object("TestDeclCounter", key).add(15)
     result = client.object("TestDeclCounter", key).get(nil)
     expect(result).to eq(15)
+  end
+
+  it "invokes via Restate.configure + Restate.client" do
+    Restate.configure do |c|
+      c.ingress_url = @harness.ingress_url
+    end
+
+    result = Restate.client.service("TestGreeter").greet("ConfigTest")
+    expect(result).to eq("Hello, ConfigTest!")
   end
 end

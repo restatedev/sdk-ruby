@@ -5,63 +5,94 @@ require 'net/http'
 require 'json'
 
 module Restate
-  # HTTP client for invoking Restate services from outside the Restate runtime.
-  # Uses the Restate ingress HTTP API.
+  # HTTP client for invoking Restate services and managing the Restate runtime
+  # from outside the Restate runtime.
   #
-  # @example Basic usage
-  #   client = Restate::Client.new("http://localhost:8080")
-  #
-  #   # Stateless service
-  #   result = client.service("Greeter").greet("World")
+  # @example Via global config (recommended)
+  #   Restate.configure do |c|
+  #     c.ingress_url = "http://localhost:8080"
+  #     c.admin_url = "http://localhost:9070"
+  #   end
+  #   client = Restate.client
   #   result = client.service(Greeter).greet("World")
   #
-  #   # Virtual object (keyed)
-  #   result = client.object("Counter", "my-key").add(5)
-  #   result = client.object(Counter, "my-key").get
+  # @example Standalone
+  #   client = Restate::Client.new(ingress_url: "http://localhost:8080",
+  #                                admin_url: "http://localhost:9070")
   #
-  #   # Workflow
-  #   result = client.workflow("UserSignup", "user42").run("user@example.com")
+  # @example Service invocation
+  #   client.service("Greeter").greet("World")
+  #   client.object("Counter", "my-key").add(5)
+  #   client.workflow("UserSignup", "user42").run("user@example.com")
   #
-  # @example With custom headers
-  #   client = Restate::Client.new("http://localhost:8080", headers: {
-  #     "Authorization" => "Bearer token123"
-  #   })
+  # @example Admin operations
+  #   client.resolve_awakeable(awakeable_id, "result")
+  #   client.reject_awakeable(awakeable_id, "failed")
+  #   client.cancel_invocation(invocation_id)
+  #   client.create_deployment("http://localhost:9080")
   class Client
     extend T::Sig
 
-    sig { params(base_url: String, headers: T::Hash[String, String]).void }
-    def initialize(base_url, headers: {})
-      @base_url = base_url.chomp('/')
-      @headers = headers
+    sig do
+      params(ingress_url: String, admin_url: String,
+             ingress_headers: T::Hash[String, String],
+             admin_headers: T::Hash[String, String]).void
+    end
+    def initialize(ingress_url: 'http://localhost:8080', admin_url: 'http://localhost:9070',
+                   ingress_headers: {}, admin_headers: {})
+      @ingress_url = ingress_url.chomp('/')
+      @admin_url = admin_url.chomp('/')
+      @ingress_headers = ingress_headers
+      @admin_headers = admin_headers
     end
 
+    # ── Service invocation proxies ──
+
     # Returns a proxy for calling a stateless service.
-    #
-    # @param service [String, Class] service name or class
-    # @return [ClientServiceProxy]
     sig { params(service: T.any(String, T::Class[T.anything])).returns(ClientServiceProxy) }
     def service(service)
-      ClientServiceProxy.new(@base_url, resolve_name(service), nil, @headers)
+      ClientServiceProxy.new(@ingress_url, resolve_name(service), nil, @ingress_headers)
     end
 
     # Returns a proxy for calling a keyed virtual object.
-    #
-    # @param service [String, Class] service name or class
-    # @param key [String] the object key
-    # @return [ClientServiceProxy]
     sig { params(service: T.any(String, T::Class[T.anything]), key: String).returns(ClientServiceProxy) }
     def object(service, key)
-      ClientServiceProxy.new(@base_url, resolve_name(service), key, @headers)
+      ClientServiceProxy.new(@ingress_url, resolve_name(service), key, @ingress_headers)
     end
 
     # Returns a proxy for calling a workflow.
-    #
-    # @param service [String, Class] service name or class
-    # @param key [String] the workflow key
-    # @return [ClientServiceProxy]
     sig { params(service: T.any(String, T::Class[T.anything]), key: String).returns(ClientServiceProxy) }
     def workflow(service, key)
-      ClientServiceProxy.new(@base_url, resolve_name(service), key, @headers)
+      ClientServiceProxy.new(@ingress_url, resolve_name(service), key, @ingress_headers)
+    end
+
+    # ── Awakeable operations ──
+
+    # Resolve an awakeable from outside the Restate runtime.
+    sig { params(awakeable_id: String, payload: T.untyped).void }
+    def resolve_awakeable(awakeable_id, payload)
+      post_ingress("/restate/awakeables/#{awakeable_id}/resolve", payload)
+    end
+
+    # Reject an awakeable from outside the Restate runtime.
+    sig { params(awakeable_id: String, message: String, code: Integer).void }
+    def reject_awakeable(awakeable_id, message, code: 500)
+      post_ingress("/restate/awakeables/#{awakeable_id}/reject",
+                   { 'message' => message, 'code' => code })
+    end
+
+    # ── Invocation management ──
+
+    # Cancel a running invocation.
+    sig { params(invocation_id: String).void }
+    def cancel_invocation(invocation_id)
+      post_admin("/restate/invocations/#{invocation_id}/cancel", nil)
+    end
+
+    # Kill a running invocation (immediate termination, no cleanup).
+    sig { params(invocation_id: String).void }
+    def kill_invocation(invocation_id)
+      post_admin("/restate/invocations/#{invocation_id}/kill", nil)
     end
 
     private
@@ -73,6 +104,40 @@ module Restate
       else
         service.to_s
       end
+    end
+
+    sig { params(path: String, body: T.untyped).returns(T.untyped) }
+    def post_ingress(path, body) # rubocop:disable Metrics/AbcSize
+      uri = URI("#{@ingress_url}#{path}")
+      request = Net::HTTP::Post.new(uri)
+      request['Content-Type'] = 'application/json'
+      @ingress_headers.each { |k, v| request[k] = v }
+      request.body = JSON.generate(body) if body
+      response = Net::HTTP.start(uri.hostname, uri.port,
+                                 use_ssl: uri.scheme == 'https',
+                                 read_timeout: 30) { |http| http.request(request) }
+      Kernel.raise "Restate ingress error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
+      parse_response(response)
+    end
+
+    sig { params(path: String, body: T.untyped).returns(T.untyped) }
+    def post_admin(path, body) # rubocop:disable Metrics/AbcSize
+      uri = URI("#{@admin_url}#{path}")
+      request = Net::HTTP::Post.new(uri)
+      request['Content-Type'] = 'application/json'
+      @admin_headers.each { |k, v| request[k] = v }
+      request.body = JSON.generate(body) if body
+      response = Net::HTTP.start(uri.hostname, uri.port,
+                                 use_ssl: uri.scheme == 'https',
+                                 read_timeout: 30) { |http| http.request(request) }
+      Kernel.raise "Restate admin error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
+      parse_response(response)
+    end
+
+    sig { params(response: Net::HTTPResponse).returns(T.untyped) }
+    def parse_response(response)
+      body = response.body
+      body && !body.empty? ? JSON.parse(body) : nil
     end
   end
 

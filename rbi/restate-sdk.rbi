@@ -494,10 +494,42 @@ module Restate
   # Proxy for fluent fire-and-forget sends.
   class ServiceSendProxy; end
 
-  # HTTP client for invoking Restate services from outside the runtime.
+  # Global SDK configuration.
+  class Config
+    sig { returns(String) }
+    attr_accessor :ingress_url
+
+    sig { returns(String) }
+    attr_accessor :admin_url
+
+    sig { returns(T::Hash[String, String]) }
+    attr_accessor :ingress_headers
+
+    sig { returns(T::Hash[String, String]) }
+    attr_accessor :admin_headers
+  end
+
+  # Configure the SDK globally.
+  sig { params(block: T.proc.params(arg0: Config).void).void }
+  def self.configure(&block); end
+
+  # Returns the global configuration.
+  sig { returns(Config) }
+  def self.config; end
+
+  # Returns a pre-configured Client using the global config.
+  sig { returns(Client) }
+  def self.client; end
+
+  # HTTP client for invoking Restate services and managing the runtime.
   class Client
-    sig { params(base_url: String, headers: T::Hash[String, String]).void }
-    def initialize(base_url, headers: {}); end
+    sig do
+      params(ingress_url: String, admin_url: String,
+             ingress_headers: T::Hash[String, String],
+             admin_headers: T::Hash[String, String]).void
+    end
+    def initialize(ingress_url: 'http://localhost:8080', admin_url: 'http://localhost:9070',
+                   ingress_headers: {}, admin_headers: {}); end
 
     sig { params(service: T.any(String, T::Class[T.anything])).returns(ClientServiceProxy) }
     def service(service); end
@@ -507,6 +539,19 @@ module Restate
 
     sig { params(service: T.any(String, T::Class[T.anything]), key: String).returns(ClientServiceProxy) }
     def workflow(service, key); end
+
+    sig { params(awakeable_id: String, payload: T.untyped).void }
+    def resolve_awakeable(awakeable_id, payload); end
+
+    sig { params(awakeable_id: String, message: String, code: Integer).void }
+    def reject_awakeable(awakeable_id, message, code: 500); end
+
+    sig { params(invocation_id: String).void }
+    def cancel_invocation(invocation_id); end
+
+    sig { params(invocation_id: String).void }
+    def kill_invocation(invocation_id); end
+
   end
 
   # Proxy for HTTP client calls.

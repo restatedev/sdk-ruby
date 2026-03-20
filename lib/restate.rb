@@ -17,6 +17,7 @@ require_relative 'restate/durable_future'
 require_relative 'restate/discovery'
 require_relative 'restate/endpoint'
 require_relative 'restate/service_proxy'
+require_relative 'restate/config'
 require_relative 'restate/client'
 
 # Restate Ruby SDK — build resilient applications with durable execution.
@@ -53,6 +54,41 @@ module Restate # rubocop:disable Metrics/ModuleLength
     services.each { |s| ep.bind(s) }
     identity_keys&.each { |k| ep.identity_key(k) }
     ep
+  end
+
+  # ── Global configuration ──
+
+  # Configure the SDK globally. Settings are used by +Restate.client+.
+  #
+  # @example
+  #   Restate.configure do |c|
+  #     c.ingress_url = "http://localhost:8080"
+  #     c.admin_url   = "http://localhost:9070"
+  #   end
+  sig { params(_block: T.proc.params(arg0: Config).void).void }
+  def configure(&_block)
+    yield config
+  end
+
+  # Returns the global configuration. Creates a default one on first access.
+  sig { returns(Config) }
+  def config
+    @config = T.let(@config, T.nilable(Config)) unless defined?(@config)
+    @config ||= Config.new
+  end
+
+  # Returns a pre-configured Client using the global +config+.
+  # Creates a new Client on each call (stateless — safe to discard).
+  #
+  # @example
+  #   Restate.client.service(Greeter).greet("World")
+  #   Restate.client.resolve_awakeable(id, payload)
+  #   Restate.client.create_deployment("http://localhost:9080")
+  sig { returns(Client) }
+  def client
+    cfg = config
+    Client.new(ingress_url: cfg.ingress_url, admin_url: cfg.admin_url,
+               ingress_headers: cfg.ingress_headers, admin_headers: cfg.admin_headers)
   end
 
   # ── Context accessor (internal) ──
