@@ -33,6 +33,9 @@ sorbet/rbi/gems/
 sorbet/rbi/dsl/
 sorbet/rbi/annotations/
 
+# Sub-project lock files (middleware_example has its own Gemfile)
+middleware_example/Gemfile.lock
+
 # OS
 .DS_Store
 Thumbs.db
