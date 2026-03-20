@@ -30,6 +30,28 @@ module Restate
       _register_handler(method_name, **T.unsafe({ kind: nil, **opts }))
     end
 
+    # Returns a call proxy for fluent durable calls to this service.
+    #
+    # @example
+    #   Greeter.call.greet("World").await
+    #
+    # @return [ServiceCallProxy]
+    def self.call
+      ServiceCallProxy.new(self, call_method: :service_call)
+    end
+
+    # Returns a send proxy for fluent fire-and-forget sends to this service.
+    #
+    # @example
+    #   Greeter.send!.greet("World")
+    #   Greeter.send!(delay: 60).greet("World")
+    #
+    # @param delay [Numeric, nil] optional delay in seconds
+    # @return [ServiceSendProxy]
+    def self.send!(delay: nil)
+      ServiceSendProxy.new(self, send_method: :service_send, delay: delay)
+    end
+
     def self._service_kind
       'service'
     end

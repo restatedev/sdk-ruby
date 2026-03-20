@@ -13,8 +13,20 @@
 require 'restate'
 
 class Greeter < Restate::Service
-  handler def greet(ctx, name)
-    ctx.run_sync('build-greeting') { "Hello, #{name}!" }
+  handler def greet(name)
+    Restate.run_sync('build-greeting') { "Hello, #{name}!" }
+  end
+end
+
+class Counter < Restate::VirtualObject
+  state :count, default: 0
+
+  handler def add(addend)
+    self.count += addend
+  end
+
+  shared def get
+    count
   end
 end
 ```
@@ -67,8 +79,8 @@ end
 
 class EventService < Restate::Service
   handler :register, input: RegistrationRequest, output: RegistrationResponse
-  def register(ctx, request)
-    registration_id = ctx.run_sync('create-registration') do
+  def register(request)
+    registration_id = Restate.run_sync('create-registration') do
       "reg_#{request.event_name}_#{rand(10_000)}"
     end
 

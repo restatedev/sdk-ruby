@@ -10,10 +10,10 @@
 # concurrent reads.
 #
 # Features:
-#   - ctx.get / ctx.set / ctx.clear   — K/V state operations
-#   - ctx.state_keys / ctx.clear_all  — enumerate or wipe all state
-#   - handler  (exclusive)            — one invocation at a time per key
-#   - shared   (concurrent)           — many readers, no writes
+#   - state :name, default: val — declarative state with auto accessors
+#   - Restate.get / Restate.set — explicit state operations
+#   - handler  (exclusive)      — one invocation at a time per key
+#   - shared   (concurrent)     — many readers, no writes
 #
 # Try it:
 #   curl localhost:8080/Counter/add    -H 'content-type: application/json' -d '3'
@@ -26,33 +26,29 @@ require 'restate'
 class Counter < Restate::VirtualObject
   # Exclusive handler — only one runs at a time per key.
   # Safe to read-modify-write without races.
-  # @param ctx [Restate::ObjectContext]
-  handler def add(ctx, addend)
-    current = ctx.get('count') || 0
+  handler def add(addend)
+    current = Restate.get('count') || 0
     updated = current + addend
-    ctx.set('count', updated)
+    Restate.set('count', updated)
     updated
   end
 
   # Shared handler — concurrent access allowed.
   # Great for reads that don't mutate state.
-  # @param ctx [Restate::ObjectSharedContext]
-  shared def get(ctx)
-    ctx.get('count') || 0
+  shared def get
+    Restate.get('count') || 0
   end
 
   # Exclusive handler — clears a single state key.
-  # @param ctx [Restate::ObjectContext]
-  handler def reset(ctx)
-    ctx.clear('count')
+  handler def reset
+    Restate.clear('count')
     'counter reset'
   end
 
   # Exclusive handler — lists all keys then wipes everything.
-  # @param ctx [Restate::ObjectContext]
-  handler def reset_all(ctx)
-    keys = ctx.state_keys
-    ctx.clear_all
+  handler def reset_all
+    keys = Restate.state_keys
+    Restate.clear_all
     { 'cleared_keys' => keys }
   end
 end

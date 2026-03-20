@@ -4,21 +4,21 @@
 require 'restate'
 
 class MapObject < Restate::VirtualObject
-  handler def set(ctx, entry)
-    ctx.set(entry['key'], entry['value'])
+  handler def set(entry)
+    Restate.set(entry['key'], entry['value'])
     nil
   end
 
-  handler def get(ctx, key)
-    ctx.get(key) || ''
+  handler def get(key)
+    Restate.get(key) || ''
   end
 
-  handler def clearAll(ctx) # rubocop:disable Naming/MethodName
+  handler def clearAll # rubocop:disable Naming/MethodName
     entries = []
-    ctx.state_keys.each do |key|
-      value = ctx.get(key)
+    Restate.state_keys.each do |key|
+      value = Restate.get(key)
       entries << { 'key' => key, 'value' => value }
-      ctx.clear(key)
+      Restate.clear(key)
     end
     entries
   end

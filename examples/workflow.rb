@@ -9,10 +9,10 @@
 # callers interact with the running workflow via promises and state.
 #
 # Features:
-#   - main handler          — entry point, runs once per workflow ID
-#   - ctx.promise           — block until a signal arrives
-#   - ctx.resolve_promise   — deliver a value to a waiting promise
-#   - ctx.set / ctx.get     — workflow state visible to shared handlers
+#   - main handler             — entry point, runs once per workflow ID
+#   - Restate.promise          — block until a signal arrives
+#   - Restate.resolve_promise  — deliver a value to a waiting promise
+#   - Restate.set / Restate.get — workflow state visible to shared handlers
 #
 # Try it:
 #   # Start the workflow
@@ -34,35 +34,32 @@
 require 'restate'
 
 class UserSignup < Restate::Workflow
-  # @param ctx [Restate::WorkflowContext]
-  main def run(ctx, email)
-    user_id = ctx.run_sync('create-account') do
+  main def run(email)
+    user_id = Restate.run_sync('create-account') do
       "user_#{email.gsub(/[^a-zA-Z0-9]/, '_')}"
     end
 
-    ctx.set('status', 'waiting_for_approval')
+    Restate.set('status', 'waiting_for_approval')
 
     # Wait for an external approval signal
-    approval = ctx.promise('approval')
-    ctx.set('status', 'approved')
+    approval = Restate.promise('approval')
+    Restate.set('status', 'approved')
 
     # Activate account
-    ctx.run_sync('activate') { puts "Activating #{user_id} — #{approval}" }
+    Restate.run_sync('activate') { puts "Activating #{user_id} — #{approval}" }
 
-    ctx.set('status', 'active')
+    Restate.set('status', 'active')
     { 'user_id' => user_id, 'email' => email, 'approval' => approval }
   end
 
   # Signal handler — delivers the approval value to the waiting workflow.
-  # @param ctx [Restate::WorkflowSharedContext]
-  handler def approve(ctx, reason)
-    ctx.resolve_promise('approval', reason)
+  handler def approve(reason)
+    Restate.resolve_promise('approval', reason)
     'approval sent'
   end
 
   # Query handler — returns current workflow status.
-  # @param ctx [Restate::WorkflowSharedContext]
-  handler def status(ctx)
-    ctx.get('status') || 'unknown'
+  handler def status
+    Restate.get('status') || 'unknown'
   end
 end

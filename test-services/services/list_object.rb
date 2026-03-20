@@ -4,19 +4,19 @@
 require 'restate'
 
 class ListObject < Restate::VirtualObject
-  handler def append(ctx, value)
-    list = ctx.get('list') || []
-    ctx.set('list', list + [value])
+  handler def append(value)
+    list = Restate.get('list') || []
+    Restate.set('list', list + [value])
     nil
   end
 
-  handler def get(ctx)
-    ctx.get('list') || []
+  handler def get
+    Restate.get('list') || []
   end
 
-  handler def clear(ctx)
-    result = ctx.get('list') || []
-    ctx.clear('list')
+  handler def clear
+    result = Restate.get('list') || []
+    Restate.clear('list')
     result
   end
 end

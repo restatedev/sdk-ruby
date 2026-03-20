@@ -84,6 +84,7 @@ Metrics/BlockLength:
 
 Metrics/ParameterLists:
   Exclude:
+    - "lib/restate.rb"
     - "lib/restate/server_context.rb"
     - "lib/restate/virtual_object.rb"
     - "lib/restate/vm.rb"

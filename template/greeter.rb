@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 require 'restate'
@@ -13,11 +13,10 @@ end
 
 class Greeter < Restate::Service # rubocop:disable Style/OneClassPerFile
   handler :greet, input: GreetingRequest, output: GreetingResponse
-  # @param ctx [Restate::Context]
   # @param request [GreetingRequest]
   # @return [GreetingResponse]
-  def greet(ctx, request)
-    message = ctx.run_sync('build-greeting') do
+  def greet(request)
+    message = Restate.run_sync('build-greeting') do
       "Hello, #{request.name}!"
     end
 

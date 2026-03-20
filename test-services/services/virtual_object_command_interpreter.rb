@@ -5,17 +5,16 @@ require 'json'
 require 'restate'
 
 def create_future_for_command(cmd) # rubocop:disable Metrics/MethodLength
-  ctx = Restate.current_object_context
   case cmd['type']
   when 'createAwakeable'
-    awk_id, future = ctx.awakeable
-    ctx.set("awk-#{cmd['awakeableKey']}", awk_id)
+    awk_id, future = Restate.awakeable
+    Restate.set("awk-#{cmd['awakeableKey']}", awk_id)
     [:awakeable, future]
   when 'sleep'
-    [:sleep, ctx.sleep(cmd['timeoutMillis'] / 1000.0)]
+    [:sleep, Restate.sleep(cmd['timeoutMillis'] / 1000.0)]
   when 'runThrowTerminalException'
     reason = cmd['reason']
-    future = ctx.run('run should fail command') do
+    future = Restate.run('run should fail command') do
       raise Restate::TerminalError, reason
     end
     [:run, future]
@@ -31,42 +30,42 @@ def await_future_result(type, future)
 end
 
 class VirtualObjectCommandInterpreter < Restate::VirtualObject
-  shared def getResults(ctx) # rubocop:disable Naming/MethodName
-    ctx.get('results') || []
+  shared def getResults # rubocop:disable Naming/MethodName
+    Restate.get('results') || []
   end
 
-  shared def hasAwakeable(ctx, awk_key) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
-    awk_id = ctx.get("awk-#{awk_key}")
+  shared def hasAwakeable(awk_key) # rubocop:disable Naming/MethodName,Naming/PredicateMethod
+    awk_id = Restate.get("awk-#{awk_key}")
     !awk_id.nil?
   end
 
-  shared def resolveAwakeable(ctx, req) # rubocop:disable Naming/MethodName
-    awk_id = ctx.get("awk-#{req['awakeableKey']}")
+  shared def resolveAwakeable(req) # rubocop:disable Naming/MethodName
+    awk_id = Restate.get("awk-#{req['awakeableKey']}")
     raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
-    ctx.resolve_awakeable(awk_id, req['value'])
+    Restate.resolve_awakeable(awk_id, req['value'])
     nil
   end
 
-  shared def rejectAwakeable(ctx, req) # rubocop:disable Naming/MethodName
-    awk_id = ctx.get("awk-#{req['awakeableKey']}")
+  shared def rejectAwakeable(req) # rubocop:disable Naming/MethodName
+    awk_id = Restate.get("awk-#{req['awakeableKey']}")
     raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
-    ctx.reject_awakeable(awk_id, req['reason'])
+    Restate.reject_awakeable(awk_id, req['reason'])
     nil
   end
 
-  handler def interpretCommands(ctx, req) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Naming/MethodName,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
+  handler def interpretCommands(req) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Naming/MethodName,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
     result = ''
 
     req['commands'].each do |cmd| # rubocop:disable Metrics/BlockLength
       case cmd['type']
       when 'awaitAwakeableOrTimeout'
-        awk_id, awk_future = ctx.awakeable
-        ctx.set("awk-#{cmd['awakeableKey']}", awk_id)
-        sleep_future = ctx.sleep(cmd['timeoutMillis'] / 1000.0)
+        awk_id, awk_future = Restate.awakeable
+        Restate.set("awk-#{cmd['awakeableKey']}", awk_id)
+        sleep_future = Restate.sleep(cmd['timeoutMillis'] / 1000.0)
 
-        completed, = ctx.wait_any(awk_future, sleep_future)
+        completed, = Restate.wait_any(awk_future, sleep_future)
 
         if completed.include?(awk_future)
           result = awk_future.await
@@ -76,22 +75,22 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
         end
 
       when 'resolveAwakeable'
-        awk_id = ctx.get("awk-#{cmd['awakeableKey']}")
+        awk_id = Restate.get("awk-#{cmd['awakeableKey']}")
         raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
-        ctx.resolve_awakeable(awk_id, cmd['value'])
+        Restate.resolve_awakeable(awk_id, cmd['value'])
         result = ''
 
       when 'rejectAwakeable'
-        awk_id = ctx.get("awk-#{cmd['awakeableKey']}")
+        awk_id = Restate.get("awk-#{cmd['awakeableKey']}")
         raise Restate::TerminalError, 'No awakeable is registered' unless awk_id
 
-        ctx.reject_awakeable(awk_id, cmd['reason'])
+        Restate.reject_awakeable(awk_id, cmd['reason'])
         result = ''
 
       when 'getEnvVariable'
         env_name = cmd['envName']
-        result = ctx.run('get_env') { ENV.fetch(env_name, '') }.await
+        result = Restate.run('get_env') { ENV.fetch(env_name, '') }.await
 
       when 'awaitOne'
         type, future = create_future_for_command(cmd['command'])
@@ -100,7 +99,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
       when 'awaitAny'
         entries = cmd['commands'].map { |c| create_future_for_command(c) }
         futures = entries.map(&:last)
-        completed, = ctx.wait_any(*futures)
+        completed, = Restate.wait_any(*futures)
         winner = completed.first
         idx = entries.index { |_, f| f == winner }
         type, future = entries[idx]
@@ -112,7 +111,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
         found = false
         until remaining.empty?
           futures = remaining.map(&:last)
-          completed, = ctx.wait_any(*futures)
+          completed, = Restate.wait_any(*futures)
           winner = completed.first
           idx = remaining.index { |_, f| f == winner }
           type, future = remaining[idx]
@@ -127,9 +126,9 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
         raise Restate::TerminalError, 'All commands failed' unless found
       end
 
-      last_results = ctx.get('results') || []
+      last_results = Restate.get('results') || []
       last_results << result
-      ctx.set('results', last_results)
+      Restate.set('results', last_results)
     end
 
     result

@@ -4,7 +4,7 @@
 #
 # The caller sets x-tenant-id in the HTTP header, Restate forwards it
 # as an invocation header, and this middleware makes it available to
-# handler code via Thread.current[:tenant_id].
+# handler code via Thread.current[:tenant_id] (fiber-scoped in Ruby 3.0+).
 class TenantMiddleware
   # @param _handler [Restate::Handler]
   # @param ctx [Restate::Context]

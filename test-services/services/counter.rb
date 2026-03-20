@@ -4,26 +4,26 @@
 require 'restate'
 
 class Counter < Restate::VirtualObject
-  handler def reset(ctx)
-    ctx.clear('counter')
+  handler def reset
+    Restate.clear('counter')
     nil
   end
 
-  handler def get(ctx)
-    ctx.get('counter') || 0
+  handler def get
+    Restate.get('counter') || 0
   end
 
-  handler def add(ctx, addend)
-    old_value = ctx.get('counter') || 0
+  handler def add(addend)
+    old_value = Restate.get('counter') || 0
     new_value = old_value + addend
-    ctx.set('counter', new_value)
+    Restate.set('counter', new_value)
     { 'oldValue' => old_value, 'newValue' => new_value }
   end
 
-  handler def addThenFail(ctx, addend) # rubocop:disable Naming/MethodName
-    old_value = ctx.get('counter') || 0
+  handler def addThenFail(addend) # rubocop:disable Naming/MethodName
+    old_value = Restate.get('counter') || 0
     new_value = old_value + addend
-    ctx.set('counter', new_value)
-    raise Restate::TerminalError, ctx.key
+    Restate.set('counter', new_value)
+    raise Restate::TerminalError, Restate.key
   end
 end

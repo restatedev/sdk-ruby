@@ -31,6 +31,70 @@ module Restate
       subclass.instance_variable_set(:@_idempotency_retention, nil)
       subclass.instance_variable_set(:@_ingress_private, nil)
       subclass.instance_variable_set(:@_invocation_retry_policy, nil)
+      subclass.instance_variable_set(:@_state_declarations, {})
+    end
+
+    # Declare a durable state entry with auto-generated getter, setter, and clear methods.
+    # Only available on VirtualObject and Workflow.
+    #
+    # The generated methods delegate to the current Restate context via +Thread.current+
+    # (fiber-scoped in Ruby 3.0+), so they work correctly across concurrent invocations.
+    #
+    # @param name [Symbol] state key name
+    # @param default [Object, nil] default value returned when state is not set
+    # @param serde [Object] serializer/deserializer (defaults to JsonSerde)
+    #
+    # @example
+    #   class Counter < Restate::VirtualObject
+    #     state :count, default: 0
+    #
+    #     handler def add(ctx, addend)
+    #       self.count += addend  # reads then writes via ctx.get/ctx.set
+    #     end
+    #
+    #     shared def get(ctx)
+    #       count  # reads via ctx.get, returns 0 if unset
+    #     end
+    #   end
+    def state(name, default: nil, serde: nil) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
+      unless T.unsafe(self).respond_to?(:_service_kind) && %w[object workflow].include?(T.unsafe(self)._service_kind)
+        Kernel.raise ArgumentError, 'state declarations are only available on VirtualObject and Workflow'
+      end
+
+      name = name.to_sym
+      @_state_declarations[name] = { default: default, serde: serde }
+      state_key = name.to_s
+      state_serde = serde
+      state_default = default
+
+      # Getter: reads from durable state, returns default if unset
+      T.unsafe(self).define_method(name) do
+        ctx = Thread.current[:restate_context]
+        Kernel.raise 'Not inside a Restate handler' unless ctx
+
+        val = state_serde ? ctx.get(state_key, serde: state_serde) : ctx.get(state_key)
+        val.nil? ? state_default : val
+      end
+
+      # Setter: writes to durable state
+      T.unsafe(self).define_method(:"#{name}=") do |value|
+        ctx = Thread.current[:restate_context]
+        Kernel.raise 'Not inside a Restate handler' unless ctx
+
+        if state_serde
+          ctx.set(state_key, value, serde: state_serde)
+        else
+          ctx.set(state_key, value)
+        end
+      end
+
+      # Clear: removes the state entry
+      T.unsafe(self).define_method(:"clear_#{name}") do
+        ctx = Thread.current[:restate_context]
+        Kernel.raise 'Not inside a Restate handler' unless ctx
+
+        ctx.clear(state_key)
+      end
     end
 
     # Get or set the service name. Defaults to the unqualified class name.
@@ -210,8 +274,8 @@ module Restate
 
         um = T.unsafe(self).instance_method(name)
         arity = um.arity.abs
-        unless [1, 2].include?(arity)
-          Kernel.raise ArgumentError, "handler '#{name}' must accept 1 or 2 parameters (ctx[, input]), got #{arity}"
+        unless [0, 1].include?(arity)
+          Kernel.raise ArgumentError, "handler '#{name}' must accept 0 or 1 parameters ([input]), got #{arity}"
         end
 
         bound = um.bind(instance)
