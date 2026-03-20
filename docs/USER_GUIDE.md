@@ -328,9 +328,15 @@ handle.cancel                        # Cancel the invocation
 
 #### Call Options
 
-All call/send methods accept these keyword arguments:
+All call/send methods — both fluent and explicit — accept these keyword arguments:
 
 ```ruby
+# Fluent API — kwargs pass through to the underlying call
+Worker.call.process(task, idempotency_key: 'unique-key').await
+Counter.call("key").add(5, headers: { 'x-trace' => 'abc' }).await
+Worker.send!.process(task, idempotency_key: 'dedup-key')
+
+# Explicit API — same kwargs
 Restate.service_call(
   MyService, :handler, arg,
   idempotency_key: 'unique-key',     # Deduplication key
@@ -339,6 +345,13 @@ Restate.service_call(
   output_serde: MyCustomSerde        # Override output serializer
 )
 ```
+
+| Option | Call | Send | Description |
+|--------|:---:|:---:|-------------|
+| `idempotency_key:` | yes | yes | Deduplication key for exactly-once semantics |
+| `headers:` | yes | yes | Custom headers forwarded to the target handler |
+| `input_serde:` | yes | yes | Override input serializer |
+| `output_serde:` | yes | — | Override output serializer |
 
 ### Fan-Out / Fan-In
 
