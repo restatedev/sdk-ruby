@@ -63,23 +63,37 @@ Restate.state_keys                # List keys
 ### Service communication
 
 ```ruby
-# Synchronous call (durable)
+# Fluent call API (recommended)
+result = Worker.call.process(task).await
+result = Counter.call("key").add(5).await
+
+# Fluent fire-and-forget
+Worker.send!.process(task)
+Worker.send!(delay: 60).process(task)
+
+# Explicit calls
 result = Restate.service_call(MyService, :handler, arg).await
 result = Restate.object_call(MyObject, :handler, 'key', arg).await
 
-# Fire-and-forget
+# Explicit fire-and-forget
 Restate.service_send(MyService, :handler, arg)
 Restate.object_send(MyObject, :handler, 'key', arg, delay: 60.0)
 ```
 
-### Typed handlers with T::Struct
+### Typed handlers with Dry::Struct
 
-Use Sorbet's `T::Struct` for typed input/output with automatic JSON Schema generation:
+Use [dry-struct](https://dry-rb.org/gems/dry-struct/) for typed input/output with automatic JSON Schema generation:
 
 ```ruby
-class MyRequest < T::Struct
-  const :name, String
-  const :age, T.nilable(Integer)
+require 'dry-struct'
+
+module Types
+  include Dry.Types()
+end
+
+class MyRequest < Dry::Struct
+  attribute :name, Types::String
+  attribute? :age, Types::Integer    # optional attribute
 end
 
 class MyService < Restate::Service
@@ -90,7 +104,7 @@ class MyService < Restate::Service
 end
 ```
 
-Supported types: `String`, `Integer`, `Float`, `T::Boolean`, `T.nilable(...)`, `T::Array[...]`, `T::Hash[...]`, nested `T::Struct`.
+Supported types: `Types::String`, `Types::Integer`, `Types::Float`, `Types::Bool`, `.optional`, `Types::Array.of(...)`, nested `Dry::Struct`.
 
 ### Sleep (durable timer)
 
@@ -132,7 +146,7 @@ run endpoint.app   # in config.ru
 
 ## Code style
 
-- Use `T::Struct` for typed handler input/output
+- Use primitive types or `Dry::Struct` for typed handler input/output
 - Use `Restate.*` module methods for all operations (run, sleep, get, set, service_call, etc.)
 - Use `run_sync` for sequential side effects, `run` + `.await` for fan-out
 - Catch `Restate::TerminalError` specifically, never bare `rescue => e`

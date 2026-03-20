@@ -58,23 +58,28 @@ Or add the gem to an existing project:
 gem install restate-sdk
 ```
 
-### Typed handlers with T::Struct
+### Typed handlers with Dry::Struct
 
-Use Sorbet's `T::Struct` for typed input/output with automatic JSON Schema generation:
+Use [dry-struct](https://dry-rb.org/gems/dry-struct/) for typed input/output with automatic JSON Schema generation:
 
 ```ruby
 require 'restate'
+require 'dry-struct'
 
-class RegistrationRequest < T::Struct
-  const :event_name, String
-  const :attendee, String
-  const :num_guests, Integer
-  const :note, T.nilable(String)
+module Types
+  include Dry.Types()
 end
 
-class RegistrationResponse < T::Struct
-  const :registration_id, String
-  const :status, String
+class RegistrationRequest < Dry::Struct
+  attribute :event_name, Types::String
+  attribute :attendee, Types::String
+  attribute :num_guests, Types::Integer
+  attribute? :note, Types::String       # optional attribute
+end
+
+class RegistrationResponse < Dry::Struct
+  attribute :registration_id, Types::String
+  attribute :status, Types::String
 end
 
 class EventService < Restate::Service

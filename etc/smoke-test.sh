@@ -90,9 +90,9 @@ puts "Harness started — ingress at #{harness.ingress_url}"
 
 # Test 1: Invoke the greeter
 print 'Test 1: Greeter returns greeting... '
-resp = post(harness.ingress_url, '/Greeter/greet', { 'name' => 'SmokeTest' })
+resp = post(harness.ingress_url, '/Greeter/greet', 'SmokeTest')
 body = JSON.parse(resp.body)
-if resp.code == '200' && body['message'] == 'Hello, SmokeTest!'
+if resp.code == '200' && body == 'Hello, SmokeTest!'
   puts "PASS (#{body})"
   passed += 1
 else
@@ -102,9 +102,9 @@ end
 
 # Test 2: Invoke with a different name (verifies durable execution)
 print 'Test 2: Greeter with different input... '
-resp = post(harness.ingress_url, '/Greeter/greet', { 'name' => 'Ruby' })
+resp = post(harness.ingress_url, '/Greeter/greet', 'Ruby')
 body = JSON.parse(resp.body)
-if resp.code == '200' && body['message'] == 'Hello, Ruby!'
+if resp.code == '200' && body == 'Hello, Ruby!'
   puts "PASS (#{body})"
   passed += 1
 else
@@ -116,8 +116,8 @@ end
 print 'Test 3: Restate::Client invocation... '
 begin
   client = Restate::Client.new(ingress_url: harness.ingress_url)
-  result = client.service('Greeter').greet({ 'name' => 'Client' })
-  if result['message'] == 'Hello, Client!'
+  result = client.service('Greeter').greet('Client')
+  if result == 'Hello, Client!'
     puts "PASS (#{result})"
     passed += 1
   else

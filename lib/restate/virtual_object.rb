@@ -1,4 +1,3 @@
-# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -17,7 +16,6 @@ module Restate
   #     end
   #   end
   class VirtualObject
-    extend T::Sig
     extend ServiceDSL
 
     # Register an exclusive handler. Use as: +handler def my_method(ctx, arg)+
@@ -33,7 +31,7 @@ module Restate
       end
       return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, **T.unsafe({ kind: kind.to_s, **opts }))
+      _register_handler(method_name, kind: kind.to_s, **opts)
     end
 
     # Register a shared (concurrent-access) handler.
@@ -46,7 +44,7 @@ module Restate
               "handler expects a Symbol (use `shared def #{method_name}(...)` or `shared :#{method_name}`)"
       end
 
-      _register_handler(method_name, **T.unsafe({ kind: 'shared', **opts }))
+      _register_handler(method_name, kind: 'shared', **opts)
     end
 
     # Returns a call proxy for fluent durable calls to this virtual object.

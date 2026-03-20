@@ -1,4 +1,3 @@
-# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -11,7 +10,6 @@ module Restate
   #     end
   #   end
   class Service
-    extend T::Sig
     extend ServiceDSL
 
     # Register a handler method on this service.
@@ -27,7 +25,7 @@ module Restate
       end
       return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, **T.unsafe({ kind: nil, **opts }))
+      _register_handler(method_name, kind: nil, **opts)
     end
 
     # Returns a call proxy for fluent durable calls to this service.

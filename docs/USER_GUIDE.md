@@ -686,50 +686,10 @@ The `input:` and `output:` options on handler declarations let you use typed str
 handler I/O. The SDK automatically deserializes input JSON into struct instances and generates
 JSON Schema for Restate's discovery protocol.
 
-Two struct libraries are supported out of the box — pick whichever fits your project:
-
-### Using T::Struct (Sorbet)
-
-If you already use [Sorbet](https://sorbet.org/), `T::Struct` gives you full type safety
-and IDE support with no extra dependencies.
-
-```ruby
-require 'restate'
-
-class GreetingRequest < T::Struct
-  const :name, String
-  const :greeting, T.nilable(String)
-end
-
-class Greeter < Restate::Service
-  handler :greet, input: GreetingRequest, output: String
-  def greet(request)
-    # request is a GreetingRequest instance, not a raw Hash
-    greeting = request.greeting || "Hello"
-    "#{greeting}, #{request.name}!"
-  end
-end
-```
-
-The SDK introspects `T::Struct` props to generate JSON Schema. Serialization uses
-`T::Struct#serialize` and `.from_hash`.
-
-Supported Sorbet type mappings:
-| Sorbet type | JSON Schema |
-|-------------|-------------|
-| `String` | `{type: 'string'}` |
-| `Integer` | `{type: 'integer'}` |
-| `Float` | `{type: 'number'}` |
-| `T::Boolean` | `{type: 'boolean'}` |
-| `T.nilable(String)` | `{anyOf: [{type: 'string'}, {type: 'null'}]}` |
-| `T::Array[String]` | `{type: 'array', items: {type: 'string'}}` |
-| `T::Hash[String, Integer]` | `{type: 'object'}` |
-| Nested `T::Struct` | Recursive object schema |
-
 ### Using Dry::Struct
 
 [dry-struct](https://dry-rb.org/gems/dry-struct/) is a popular typed struct library that
-works without Sorbet. Add it as an optional dependency:
+Add it as an optional dependency:
 
 ```ruby
 gem 'dry-struct'
@@ -771,7 +731,7 @@ Supported dry-types mappings:
 
 ### How It Works
 
-Both struct types are auto-detected at runtime — no configuration needed. When a handler
+`Dry::Struct` types are auto-detected at runtime — no configuration needed. When a handler
 declares `input: MyRequest`:
 - Input JSON is deserialized into a struct instance (not a raw Hash)
 - JSON Schema is generated from the struct definition and published via Restate discovery
@@ -793,11 +753,10 @@ and use standard JSON serialization.
 
 When `input:` or `output:` is provided, the SDK resolves a serde in this order:
 1. **Serde object** — if it responds to `serialize` and `deserialize`, use it directly
-2. **T::Struct subclass** — use `TStructSerde` (Sorbet native)
-3. **Dry::Struct subclass** — use `DryStructSerde`
-4. **Primitive type** (`String`, `Integer`, etc.) — use `JsonSerde` with type schema
-5. **Class with `.json_schema`** — use `JsonSerde` with that schema
-6. **Fallback** — `JsonSerde` with no schema
+2. **Dry::Struct subclass** — use `DryStructSerde`
+3. **Primitive type** (`String`, `Integer`, etc.) — use `JsonSerde` with type schema
+4. **Class with `.json_schema`** — use `JsonSerde` with that schema
+5. **Fallback** — `JsonSerde` with no schema
 
 ---
 
@@ -890,60 +849,6 @@ go-to-definition for all Restate types — no extra setup needed.
 
 Since all Restate operations are called as `Restate.*` module methods, code completion works
 automatically without any YARD annotations.
-
-### Sorbet + Tapioca (Optional)
-
-For full static type checking, the SDK ships RBI files inside the gem and a
-[Tapioca](https://github.com/Shopify/tapioca) DSL compiler that generates typed handler
-signatures.
-
-**1. Add Sorbet and Tapioca to your Gemfile:**
-
-```ruby
-group :development do
-  gem 'sorbet', require: false
-  gem 'tapioca', require: false
-end
-```
-
-**2. Generate type information:**
-
-```bash
-bundle install
-bundle exec tapioca gems    # Generate RBI for all gems (one-time)
-bundle exec tapioca dsl     # Generate typed handler signatures
-```
-
-This creates RBI files under `sorbet/rbi/`. For example, given:
-
-```ruby
-class Counter < Restate::VirtualObject
-  handler def add(addend)
-    old = Restate.get('count') || 0
-    Restate.set('count', old + addend)
-  end
-
-  shared def get
-    Restate.get('count') || 0
-  end
-end
-```
-
-Tapioca generates:
-
-```ruby
-# sorbet/rbi/dsl/counter.rbi (auto-generated, do not edit)
-class Counter
-  sig { params(input: T.untyped).returns(T.untyped) }
-  def add(input); end
-
-  sig { returns(T.untyped) }
-  def get; end
-end
-```
-
-Run `tapioca dsl` again whenever you add or rename handlers. Commit the generated
-`sorbet/rbi/` files to version control so the whole team benefits.
 
 ---
 
@@ -1132,7 +1037,6 @@ The `examples/` directory contains runnable examples:
 | `workflow.rb` | Declarative state, promises, signals |
 | `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
-| `typed_handlers_sorbet.rb` | `input:`/`output:` with `T::Struct` (Sorbet), JSON Schema generation |
 | `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
 | [`middleware_example/`](../middleware_example/) | Real OpenTelemetry tracing + tenant isolation middleware (self-contained) |
 

@@ -1,4 +1,3 @@
-# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -15,7 +14,6 @@ module Restate
   #     end
   #   end
   class Workflow
-    extend T::Sig
     extend ServiceDSL
 
     # Register the main workflow entry point.
@@ -31,7 +29,7 @@ module Restate
       end
       return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, **T.unsafe({ kind: 'workflow', **opts }))
+      _register_handler(method_name, kind: 'workflow', **opts)
     end
 
     # Register a shared handler on this workflow.
@@ -46,7 +44,7 @@ module Restate
       end
       return method_name unless method_name.is_a?(Symbol)
 
-      _register_handler(method_name, **T.unsafe({ kind: 'shared', **opts }))
+      _register_handler(method_name, kind: 'shared', **opts)
     end
 
     # Returns a call proxy for fluent durable calls to this workflow.

@@ -1,4 +1,4 @@
-.PHONY: build compile test test-harness test-integration clean fmt check install typecheck lint lint-fix verify tapioca
+.PHONY: build compile test test-harness test-integration clean fmt check install lint lint-fix verify
 
 # Build the native extension and compile
 build: compile
@@ -17,14 +17,6 @@ test-harness: compile
 # Run sdk-test-suite integration tests (requires Docker + Java 21+)
 test-integration: compile
 	./etc/run-integration-tests.sh
-
-# Generate Tapioca DSL RBI files (typed handler signatures)
-tapioca: compile
-	bundle exec tapioca dsl
-
-# Type checking
-typecheck:
-	bundle exec srb tc
 
 # Linting
 lint:
@@ -54,8 +46,8 @@ install:
 gem: compile
 	gem build restate-sdk.gemspec
 
-# Build, lint, typecheck, and run unit tests (no integration tests)
-verify: compile tapioca lint typecheck test-harness
+# Build, lint, and run unit tests (no integration tests)
+verify: compile lint test-harness
 
-# Run everything (install, compile, test, typecheck, lint)
-all: install compile test typecheck lint
+# Run everything (install, compile, test, lint)
+all: install compile test lint

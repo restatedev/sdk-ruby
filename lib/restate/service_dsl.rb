@@ -1,4 +1,3 @@
-# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -57,7 +56,7 @@ module Restate
     #     end
     #   end
     def state(name, default: nil, serde: nil) # rubocop:disable Metrics/MethodLength,Metrics/AbcSize,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
-      unless T.unsafe(self).respond_to?(:_service_kind) && %w[object workflow].include?(T.unsafe(self)._service_kind)
+      unless respond_to?(:_service_kind) && %w[object workflow].include?(_service_kind)
         Kernel.raise ArgumentError, 'state declarations are only available on VirtualObject and Workflow'
       end
 
@@ -68,7 +67,7 @@ module Restate
       state_default = default
 
       # Getter: reads from durable state, returns default if unset
-      T.unsafe(self).define_method(name) do
+      define_method(name) do
         ctx = Thread.current[:restate_context]
         Kernel.raise 'Not inside a Restate handler' unless ctx
 
@@ -77,7 +76,7 @@ module Restate
       end
 
       # Setter: writes to durable state
-      T.unsafe(self).define_method(:"#{name}=") do |value|
+      define_method(:"#{name}=") do |value|
         ctx = Thread.current[:restate_context]
         Kernel.raise 'Not inside a Restate handler' unless ctx
 
@@ -89,7 +88,7 @@ module Restate
       end
 
       # Clear: removes the state entry
-      T.unsafe(self).define_method(:"clear_#{name}") do
+      define_method(:"clear_#{name}") do
         ctx = Thread.current[:restate_context]
         Kernel.raise 'Not inside a Restate handler' unless ctx
 
@@ -105,7 +104,7 @@ module Restate
       if name
         @_service_name = name
       else
-        @_service_name || T.unsafe(self).name&.split('::')&.last
+        @_service_name || self.name&.split('::')&.last
       end
     end
 
@@ -199,7 +198,7 @@ module Restate
     #
     # @return [ServiceTag]
     def service_tag
-      ServiceTag.new(kind: T.unsafe(self)._service_kind, name: service_name,
+      ServiceTag.new(kind: _service_kind, name: service_name,
                      description: @_description, metadata: @_metadata)
     end
 
@@ -259,7 +258,7 @@ module Restate
     def _build_handlers # rubocop:disable Metrics/AbcSize,Metrics/MethodLength
       tag = service_tag
       result = {}
-      instance = T.unsafe(self).allocate
+      instance = allocate
 
       @_handler_registry.each do |name, meta| # rubocop:disable Metrics/BlockLength
         input_serde = Serde.resolve(meta[:input])
@@ -272,7 +271,7 @@ module Restate
           output_serde: output_serde
         )
 
-        um = T.unsafe(self).instance_method(name)
+        um = instance_method(name)
         arity = um.arity.abs
         unless [0, 1].include?(arity)
           Kernel.raise ArgumentError, "handler '#{name}' must accept 0 or 1 parameters ([input]), got #{arity}"
