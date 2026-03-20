@@ -1,4 +1,4 @@
-.PHONY: build compile test test-harness test-integration clean fmt check install lint lint-fix verify
+.PHONY: build compile test test-harness test-integration clean fmt check install lint lint-fix typecheck verify
 
 # Build the native extension and compile
 build: compile
@@ -25,6 +25,11 @@ lint:
 lint-fix:
 	bundle exec rubocop -A
 
+# Type check — Steep (public API, shipped RBS) + Sorbet (internal, dev-only)
+typecheck:
+	bundle exec steep check
+	bundle exec srb tc
+
 # Check Rust code compiles
 check:
 	cargo check
@@ -47,7 +52,7 @@ gem: compile
 	gem build restate-sdk.gemspec
 
 # Build, lint, and run unit tests (no integration tests)
-verify: compile lint test-harness
+verify: compile lint typecheck test-harness
 
 # Run everything (install, compile, test, lint)
 all: install compile test lint
