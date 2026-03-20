@@ -16,9 +16,6 @@ module Restate
   #
   # @!visibility private
   class ServiceCallProxy
-    extend T::Sig
-
-    sig { params(service_class: T.untyped, key: T.nilable(String), call_method: Symbol).void }
     def initialize(service_class, key: nil, call_method: :service_call)
       @service_class = service_class
       @key = key
@@ -35,7 +32,7 @@ module Restate
     end
 
     def respond_to_missing?(method_name, include_private = false)
-      (@service_class.respond_to?(:handlers) && T.unsafe(@service_class).handlers.key?(method_name.to_s)) || super
+      (@service_class.respond_to?(:handlers) && @service_class.handlers.key?(method_name.to_s)) || super
     end
   end
 
@@ -52,14 +49,6 @@ module Restate
   #
   # @!visibility private
   class ServiceSendProxy
-    extend T::Sig
-
-    sig do
-      params(
-        service_class: T.untyped, key: T.nilable(String),
-        send_method: Symbol, delay: T.nilable(Numeric)
-      ).void
-    end
     def initialize(service_class, key: nil, send_method: :service_send, delay: nil)
       @service_class = service_class
       @key = key
@@ -78,7 +67,7 @@ module Restate
     end
 
     def respond_to_missing?(method_name, include_private = false)
-      (@service_class.respond_to?(:handlers) && T.unsafe(@service_class).handlers.key?(method_name.to_s)) || super
+      (@service_class.respond_to?(:handlers) && @service_class.handlers.key?(method_name.to_s)) || super
     end
   end
 end

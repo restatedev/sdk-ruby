@@ -1,46 +1,54 @@
 # typed: true
 
+# Minimal shims for Async/Falcon/Testcontainers — enough for Sorbet to check our code.
+
+module Kernel
+  def Async(&block); end
+end
+
 module Async
   class Queue
-    sig { void }
     def initialize; end
-
-    sig { params(item: T.untyped).void }
     def enqueue(item); end
-
-    sig { returns(T.untyped) }
     def dequeue; end
   end
 
-  module HTTP
-    class Endpoint
-      sig { params(url: String, options: T.untyped).returns(T.untyped) }
-      def self.parse(url, **options); end
+  class HTTP
+    class Body
+      class Hijack
+        def initialize(&block); end
+      end
     end
   end
 end
 
 module Falcon
   class Server
-    sig { params(middleware: T.untyped, endpoint: T.untyped).void }
-    def initialize(middleware, endpoint); end
+    def initialize(app, endpoint, **opts); end
+    def start; end
+    def stop; end
+  end
 
-    sig { params(app: T.untyped, options: T.untyped).returns(T.untyped) }
-    def self.middleware(app, **options); end
-
-    sig { void }
-    def run; end
+  module Endpoint
+    def self.parse(url); end
   end
 end
 
 module Testcontainers
   class DockerContainer
-    sig { params(image: String).void }
-    def initialize(image); end
-  end
-end
+    def initialize(image, **opts); end
+    def start; end
+    def stop; end
+    def remove; end
+    def mapped_port(port); end
+    def host; end
+    def logs; end
+    def wait_for_logs(matcher, timeout:); end
+    def with_exposed_ports(*ports); end
+    def with_env(env); end
+    def wait_for_http(path:, port:, timeout:); end
 
-module Kernel
-  sig { params(block: T.proc.void).returns(T.untyped) }
-  def Async(&block); end
+    private
+    def _container_create_options; end
+  end
 end

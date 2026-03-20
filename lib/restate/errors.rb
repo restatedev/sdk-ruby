@@ -1,4 +1,4 @@
-# typed: strict
+# typed: true
 # frozen_string_literal: true
 
 module Restate
@@ -7,24 +7,17 @@ module Restate
   # @example
   #   raise Restate::TerminalError.new('not found', status_code: 404)
   class TerminalError < StandardError
-    extend T::Sig
-
-    sig { returns(Integer) }
     attr_reader :status_code
 
-    sig { params(message: String, status_code: Integer).void }
     def initialize(message = 'Internal Server Error', status_code: 500)
       super(message)
-      @status_code = T.let(status_code, Integer)
+      @status_code = status_code
     end
   end
 
   # Internal: raised when the VM suspends execution.
   # User code should NOT catch this.
   class SuspendedError < StandardError
-    extend T::Sig
-
-    sig { void }
     def initialize
       super(
         "Invocation got suspended, Restate will resume this invocation when progress can be made.\n" \
@@ -37,9 +30,6 @@ module Restate
 
   # Internal: raised when the VM encounters a retryable error.
   class InternalError < StandardError
-    extend T::Sig
-
-    sig { void }
     def initialize
       super(
         "Invocation attempt raised a retryable error.\n" \
@@ -50,9 +40,6 @@ module Restate
 
   # Internal: raised when the HTTP connection is lost.
   class DisconnectedError < StandardError
-    extend T::Sig
-
-    sig { void }
     def initialize
       super('Disconnected. The connection to the restate server was lost. Restate will retry the attempt.')
     end

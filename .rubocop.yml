@@ -1,6 +1,3 @@
-plugins:
-  - rubocop-sorbet
-
 AllCops:
   TargetRubyVersion: 3.1
   NewCops: enable
@@ -9,7 +6,6 @@ AllCops:
     - "ext/**/*"
     - ".bundle/**/*"
     - "pkg/**/*"
-    - "sorbet/rbi/**/*"
     - "spec/**/*"
     - "tmp/**/*"
     - "vendor/**/*"
@@ -85,6 +81,7 @@ Metrics/BlockLength:
 Metrics/ParameterLists:
   Exclude:
     - "lib/restate.rb"
+    - "lib/restate/context.rb"
     - "lib/restate/server_context.rb"
     - "lib/restate/virtual_object.rb"
     - "lib/restate/vm.rb"
@@ -93,13 +90,6 @@ Metrics/ParameterLists:
 Lint/DuplicateBranch:
   Exclude:
     - "lib/restate/server.rb"
-
-# Sorbet sigs require named block parameters, conflicts with anonymous forwarding
-Naming/BlockForwarding:
-  Enabled: false
-
-Style/ArgumentsForwarding:
-  Enabled: false
 
 # These marker classes are intentionally empty (used as type tags)
 Lint/EmptyClass:

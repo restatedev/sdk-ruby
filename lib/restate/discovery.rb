@@ -5,36 +5,32 @@ require 'json'
 
 module Restate
   module Discovery # rubocop:disable Metrics/ModuleLength
-    extend T::Sig
-
-    PROTOCOL_MODES = T.let({
+    PROTOCOL_MODES = {
       'bidi' => 'BIDI_STREAM',
       'request_response' => 'REQUEST_RESPONSE'
-    }.freeze, T::Hash[String, String])
+    }.freeze
 
-    SERVICE_TYPES = T.let({
+    SERVICE_TYPES = {
       'service' => 'SERVICE',
       'object' => 'VIRTUAL_OBJECT',
       'workflow' => 'WORKFLOW'
-    }.freeze, T::Hash[String, String])
+    }.freeze
 
-    HANDLER_TYPES = T.let({
+    HANDLER_TYPES = {
       'exclusive' => 'EXCLUSIVE',
       'shared' => 'SHARED',
       'workflow' => 'WORKFLOW'
-    }.freeze, T::Hash[String, String])
+    }.freeze
 
     module_function
 
     # Generate the discovery JSON for the given endpoint.
-    sig { params(endpoint: Endpoint, _version: Integer, discovered_as: String).returns(String) }
     def compute_discovery_json(endpoint, _version, discovered_as)
       ep = compute_discovery(endpoint, discovered_as)
       JSON.generate(ep, allow_nan: false)
     end
 
     # Build the discovery hash for the endpoint.
-    sig { params(endpoint: Endpoint, discovered_as: String).returns(T::Hash[Symbol, T.untyped]) }
     def compute_discovery(endpoint, discovered_as)
       services = endpoint.services.values.map do |service|
         build_service(service)
@@ -50,7 +46,6 @@ module Restate
       )
     end
 
-    sig { params(service: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
     def build_service(service) # rubocop:disable Metrics/AbcSize
       service_type = SERVICE_TYPES.fetch(service.service_tag.kind)
 
@@ -80,7 +75,6 @@ module Restate
       result
     end
 
-    sig { params(handler: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
     def build_handler(handler) # rubocop:disable Metrics/AbcSize
       ty = handler.kind ? HANDLER_TYPES.fetch(handler.kind) : nil
 
@@ -118,7 +112,6 @@ module Restate
     end
 
     # Convert seconds to milliseconds (integer). Returns nil if input is nil.
-    sig { params(seconds: T.nilable(Numeric)).returns(T.nilable(Integer)) }
     def seconds_to_ms(seconds)
       return nil if seconds.nil?
 
@@ -126,7 +119,6 @@ module Restate
     end
 
     # Merge retry policy fields (flattened) into the target hash.
-    sig { params(target: T::Hash[Symbol, T.untyped], policy: T.nilable(T::Hash[Symbol, T.untyped])).void }
     def merge_retry_policy!(target, policy) # rubocop:disable Metrics/AbcSize,Metrics/CyclomaticComplexity
       return if policy.nil? || policy.empty?
 
@@ -138,7 +130,6 @@ module Restate
     end
 
     # Remove nil values from a hash (non-recursive for top level, recursive for nested).
-    sig { params(kwargs: T.untyped).returns(T::Hash[Symbol, T.untyped]) }
     def compact(**kwargs)
       kwargs.each_with_object({}) do |(k, v), result|
         next if v.nil?

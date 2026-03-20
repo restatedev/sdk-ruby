@@ -14,8 +14,8 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir[
     'lib/**/*.rb',
+    'sig/**/*.rbs',
     'ext/**/*.{rs,toml,rb}',
-    'rbi/**/*.rbi',
     'Cargo.*',
     'LICENSE',
     'README.md'
@@ -26,6 +26,5 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'async', '~> 2.0'
   spec.add_dependency 'rack', '>= 2.0'
-  spec.add_dependency 'sorbet-runtime'
   spec.metadata['rubygems_mfa_required'] = 'true'
 end

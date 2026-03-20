@@ -1,0 +1,196 @@
+# Public API type signatures for the Restate Ruby SDK.
+# Used by Steep for static type checking and by Ruby LSP for IDE completion.
+
+module Restate
+  # ── Endpoint ──
+
+  def self.endpoint: (*untyped services, ?protocol: String?, ?identity_keys: Array[String]?) -> Endpoint
+  def self.configure: () { (Config) -> void } -> void
+  def self.config: () -> Config
+  def self.client: () -> Client
+
+  # ── Durable execution ──
+
+  def self.run: (String name, ?serde: untyped, ?retry_policy: untyped, ?background: bool) { () -> untyped } -> DurableFuture
+  def self.run_sync: (String name, ?serde: untyped, ?retry_policy: untyped, ?background: bool) { () -> untyped } -> untyped
+  def self.sleep: (Numeric seconds) -> DurableFuture
+
+  # ── State operations ──
+
+  def self.get: (String name, ?serde: untyped) -> untyped
+  def self.get_async: (String name, ?serde: untyped) -> DurableFuture
+  def self.set: (String name, untyped value, ?serde: untyped) -> void
+  def self.clear: (String name) -> void
+  def self.clear_all: () -> void
+  def self.state_keys: () -> Array[String]
+  def self.state_keys_async: () -> DurableFuture
+
+  # ── Service communication ──
+
+  def self.service_call: (untyped service, (String | Symbol) handler, untyped arg, ?key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
+  def self.service_send: (untyped service, (String | Symbol) handler, untyped arg, ?key: String?, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
+  def self.object_call: (untyped service, (String | Symbol) handler, String key, untyped arg, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
+  def self.object_send: (untyped service, (String | Symbol) handler, String key, untyped arg, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
+  def self.workflow_call: (untyped service, (String | Symbol) handler, String key, untyped arg, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
+  def self.workflow_send: (untyped service, (String | Symbol) handler, String key, untyped arg, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
+  def self.generic_call: (String service, String handler, String arg, ?key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?) -> DurableCallFuture
+  def self.generic_send: (String service, String handler, String arg, ?key: String?, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?) -> SendHandle
+
+  # ── Awakeables ──
+
+  def self.awakeable: (?serde: untyped) -> [String, DurableFuture]
+  def self.resolve_awakeable: (String awakeable_id, untyped payload, ?serde: untyped) -> void
+  def self.reject_awakeable: (String awakeable_id, String message, ?code: Integer) -> void
+
+  # ── Promises ──
+
+  def self.promise: (String name, ?serde: untyped) -> untyped
+  def self.peek_promise: (String name, ?serde: untyped) -> untyped
+  def self.resolve_promise: (String name, untyped payload, ?serde: untyped) -> void
+  def self.reject_promise: (String name, String message, ?code: Integer) -> void
+
+  # ── Futures / Metadata / Control ──
+
+  def self.wait_any: (*DurableFuture futures) -> [Array[DurableFuture], Array[DurableFuture]]
+  def self.request: () -> untyped
+  def self.key: () -> String
+  def self.cancel_invocation: (String invocation_id) -> void
+  def self.fetch_context!: (?service_kind: String?, ?handler_kind: String?) -> untyped
+
+  # ── Errors ──
+
+  class TerminalError < StandardError
+    attr_reader status_code: Integer
+    def initialize: (?String message, ?status_code: Integer) -> void
+  end
+
+  class SuspendedError < StandardError
+    def initialize: () -> void
+  end
+
+  class InternalError < StandardError
+    def initialize: () -> void
+  end
+
+  class DisconnectedError < StandardError
+    def initialize: () -> void
+  end
+
+  # ── Futures ──
+
+  class DurableFuture
+    attr_reader handle: Integer
+    def initialize: (untyped ctx, Integer handle, ?serde: untyped) -> void
+    def await: () -> untyped
+    def completed?: () -> bool
+  end
+
+  class DurableCallFuture < DurableFuture
+    def initialize: (untyped ctx, Integer result_handle, Integer invocation_id_handle, output_serde: untyped) -> void
+    def invocation_id: () -> String
+    def cancel: () -> void
+  end
+
+  class SendHandle
+    def initialize: (untyped ctx, Integer invocation_id_handle) -> void
+    def invocation_id: () -> String
+    def cancel: () -> void
+  end
+
+  # ── Config ──
+
+  class Config
+    attr_accessor ingress_url: String
+    attr_accessor admin_url: String
+    attr_accessor ingress_headers: Hash[String, String]
+    attr_accessor admin_headers: Hash[String, String]
+    def initialize: () -> void
+  end
+
+  # ── Client ──
+
+  class Client
+    def initialize: (?ingress_url: String, ?admin_url: String, ?ingress_headers: Hash[String, String], ?admin_headers: Hash[String, String]) -> void
+    def service: (untyped service) -> ClientServiceProxy
+    def object: (untyped service, String key) -> ClientServiceProxy
+    def workflow: (untyped service, String key) -> ClientServiceProxy
+    def resolve_awakeable: (String awakeable_id, untyped payload) -> void
+    def reject_awakeable: (String awakeable_id, String message, ?code: Integer) -> void
+    def cancel_invocation: (String invocation_id) -> void
+    def kill_invocation: (String invocation_id) -> void
+
+    private
+
+    def resolve_name: (untyped service) -> String
+    def post_ingress: (String path, untyped body) -> untyped
+    def post_admin: (String path, untyped body) -> untyped
+    def parse_response: (Net::HTTPResponse response) -> untyped
+  end
+
+  class ClientServiceProxy
+    def initialize: (String base_url, String service_name, String? key, Hash[String, String] headers) -> void
+  end
+
+  # ── Endpoint ──
+
+  class Endpoint
+    attr_reader services: Hash[String, untyped]
+    attr_reader identity_keys: Array[String]
+    attr_accessor protocol: String?
+    attr_reader middleware: Array[untyped]
+    def initialize: () -> void
+    def bind: (*untyped svcs) -> self
+    def streaming_protocol: () -> self
+    def request_response_protocol: () -> self
+    def identity_key: (String key) -> self
+    def use: (untyped klass, *untyped args, **untyped kwargs) -> self
+    def app: () -> untyped
+  end
+
+  # ── Service proxies ──
+
+  class ServiceCallProxy
+    def initialize: (untyped service_class, ?key: String?, ?call_method: Symbol) -> void
+  end
+
+  class ServiceSendProxy
+    def initialize: (untyped service_class, ?key: String?, ?send_method: Symbol, ?delay: Numeric?) -> void
+  end
+
+  # ── Service classes (declared but not checked — heavy metaprogramming) ──
+
+  class Service
+  end
+
+  class VirtualObject
+  end
+
+  class Workflow
+  end
+
+  # ── Internal ──
+
+  class Server
+    def initialize: (untyped endpoint) -> void
+  end
+
+  module JsonSerde
+    def self.serialize: (untyped obj) -> String
+    def self.deserialize: (String? buf) -> untyped
+    def self.json_schema: () -> Hash[String, untyped]?
+  end
+
+  module BytesSerde
+    def self.serialize: (untyped obj) -> String
+    def self.deserialize: (String? buf) -> String?
+    def self.json_schema: () -> Hash[String, untyped]?
+  end
+
+  class AttemptFinishedEvent
+    def set?: () -> bool
+    def wait: () -> void
+  end
+
+  NOT_SET: untyped
+  RunRetryPolicy: untyped
+end

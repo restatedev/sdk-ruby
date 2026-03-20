@@ -73,19 +73,6 @@ class TestFiberLocalCtx < Restate::Service
   end
 end
 
-class TStructRequest < T::Struct
-  const :name, String
-  const :greeting, T.nilable(String)
-end
-
-class TStructGreeter < Restate::Service
-  handler :greet, input: TStructRequest, output: String
-  def greet(request)
-    greeting = request.greeting || "Hello"
-    "#{greeting}, #{request.name}!"
-  end
-end
-
 class TypedGreeter < Restate::Service
   handler :greet, input: GreetingRequest, output: String
   def greet(request)
@@ -177,7 +164,7 @@ RSpec.describe Restate::Testing do
   before(:all) do
     @harness = Restate::Testing::RestateTestHarness.new(
       TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TestFiberLocalCtx,
-      TStructGreeter, TypedGreeter, MiddlewareTestService,
+      TypedGreeter, MiddlewareTestService,
       TestDeclCounter, TestFluentWorker, TestFluentOrchestrator
     ) do |endpoint|
       endpoint.use(TestHeaderMiddleware)
@@ -227,19 +214,6 @@ RSpec.describe Restate::Testing do
     response = post_json(@harness.ingress_url, "/TestOrchestrator/orchestrate", "hello")
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("orchestrated:processed:hello")
-  end
-
-  it "handles typed T::Struct input" do
-    response = post_json(@harness.ingress_url, "/TStructGreeter/greet", { "name" => "World" })
-    expect(response.code).to eq("200")
-    expect(JSON.parse(response.body)).to eq("Hello, World!")
-  end
-
-  it "handles typed T::Struct input with optional field" do
-    response = post_json(@harness.ingress_url, "/TStructGreeter/greet",
-                         { "name" => "World", "greeting" => "Hey" })
-    expect(response.code).to eq("200")
-    expect(JSON.parse(response.body)).to eq("Hey, World!")
   end
 
   it "handles typed dry-struct input" do

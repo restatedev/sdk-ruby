@@ -1,259 +1,78 @@
 # typed: true
 
+# Shim for the native Rust extension (ext/restate_internal/).
+# These classes/methods are defined in Rust via Magnus and not visible to Sorbet.
+
 module Restate
   module Internal
-    SDK_VERSION = T.let(T.unsafe(nil), String)
-    CANCEL_NOTIFICATION_HANDLE = T.let(T.unsafe(nil), Integer)
+    CANCEL_NOTIFICATION_HANDLE = T.let(0, Integer)
 
-    class VMError < RuntimeError; end
-    class IdentityKeyError < RuntimeError; end
-    class IdentityVerificationError < RuntimeError; end
-
-    class Header
-      sig { params(key: String, value: String).void }
-      def initialize(key, value); end
-
-      sig { returns(String) }
-      def key; end
-
-      sig { returns(String) }
-      def value; end
-    end
-
-    class ResponseHead
-      sig { returns(Integer) }
-      def status_code; end
-
-      sig { returns(T::Array[T::Array[String]]) }
-      def headers; end
-    end
-
-    class Failure
-      sig { params(code: Integer, message: String, stacktrace: T.nilable(String)).void }
-      def initialize(code, message, stacktrace = nil); end
-
-      sig { returns(Integer) }
-      def code; end
-
-      sig { returns(String) }
-      def message; end
-
-      sig { returns(T.nilable(String)) }
-      def stacktrace; end
-    end
-
-    class Void; end
-    class Suspended; end
-
-    class StateKeys
-      sig { returns(T::Array[String]) }
-      def keys; end
-    end
-
-    class Input
-      sig { returns(String) }
-      def invocation_id; end
-
-      sig { returns(Integer) }
-      def random_seed; end
-
-      sig { returns(String) }
-      def key; end
-
-      sig { returns(T::Array[Header]) }
-      def headers; end
-
-      sig { returns(String) }
-      def input; end
-    end
-
-    class ExponentialRetryConfig
-      sig do
-        params(
-          initial_interval: T.nilable(Integer),
-          max_attempts: T.nilable(Integer),
-          max_duration: T.nilable(Integer),
-          max_interval: T.nilable(Integer),
-          factor: T.nilable(Float)
-        ).void
-      end
-      def initialize(initial_interval = nil, max_attempts = nil, max_duration = nil, max_interval = nil,
-                     factor = nil); end
-
-      sig { returns(T.nilable(Integer)) }
-      def initial_interval; end
-
-      sig { returns(T.nilable(Integer)) }
-      def max_attempts; end
-
-      sig { returns(T.nilable(Integer)) }
-      def max_duration; end
-
-      sig { returns(T.nilable(Integer)) }
-      def max_interval; end
-
-      sig { returns(T.nilable(Float)) }
-      def factor; end
-    end
-
-    class DoProgressAnyCompleted; end
-    class DoProgressReadFromInput; end
-
-    class DoProgressExecuteRun
-      sig { returns(Integer) }
-      def handle; end
-    end
-
-    class DoProgressCancelSignalReceived; end
-    class DoWaitForPendingRun; end
-
-    class CallHandle
-      sig { returns(Integer) }
-      def invocation_id_handle; end
-
-      sig { returns(Integer) }
-      def result_handle; end
+    class VM
+      def initialize(headers:, input:); end
+      def notify_input(bytes); end
+      def notify_input_closed; end
+      def is_ready_to_execute?; end
+      def sys_input; end
+      def do_progress(handles); end
+      def take_output; end
+      def take_notification(handle); end
+      def is_completed(handle); end
+      def sys_get_state(name); end
+      def sys_get_state_keys; end
+      def sys_set_state(name, value); end
+      def sys_clear_state(name); end
+      def sys_clear_all_state; end
+      def sys_sleep(millis); end
+      def sys_run(name); end
+      def sys_call(service:, handler:, parameter:, key:, idempotency_key:, headers:); end
+      def sys_send(service:, handler:, parameter:, key:, delay:, idempotency_key:, headers:); end
+      def sys_awakeable; end
+      def sys_complete_awakeable_success(id, value); end
+      def sys_complete_awakeable_failure(id, failure); end
+      def sys_get_promise(name); end
+      def sys_peek_promise(name); end
+      def sys_complete_promise_success(name, value); end
+      def sys_complete_promise_failure(name, failure); end
+      def sys_cancel_invocation(id); end
+      def sys_write_output_success(bytes); end
+      def sys_write_output_failure(failure); end
+      def sys_end; end
+      def notify_error(message, stacktrace); end
+      def propose_run_completion_success(handle, value); end
+      def propose_run_completion_failure(handle, failure); end
+      def propose_run_completion_transient(handle, failure:, attempt_duration_ms:, config:); end
+      def is_replaying; end
     end
 
     class IdentityVerifier
-      sig { params(keys: T::Array[String]).void }
       def initialize(keys); end
-
-      sig { params(headers: T::Array[T::Array[String]], path: String).void }
-      def verify(headers, path); end
-    end
-
-    class VM
-      sig { params(headers: T::Array[T::Array[String]]).void }
-      def initialize(headers); end
-
-      sig { returns(ResponseHead) }
-      def get_response_head; end
-
-      sig { params(buffer: String).void }
-      def notify_input(buffer); end
-
-      sig { void }
-      def notify_input_closed; end
-
-      sig { params(error: String, stacktrace: T.untyped).void }
-      def notify_error(error, stacktrace = nil); end
-
-      sig { returns(T.nilable(String)) }
-      def take_output; end
-
-      sig { returns(T::Boolean) }
-      def is_ready_to_execute; end
-
-      sig { params(handle: Integer).returns(T::Boolean) }
-      def is_completed(handle); end
-
-      sig { params(handles: T::Array[Integer]).returns(T.untyped) }
-      def do_progress(handles); end
-
-      sig { params(handle: Integer).returns(T.untyped) }
-      def take_notification(handle); end
-
-      sig { returns(Input) }
-      def sys_input; end
-
-      sig { params(key: String).returns(Integer) }
-      def sys_get_state(key); end
-
-      sig { returns(Integer) }
-      def sys_get_state_keys; end
-
-      sig { params(key: String, buffer: String).void }
-      def sys_set_state(key, buffer); end
-
-      sig { params(key: String).void }
-      def sys_clear_state(key); end
-
-      sig { void }
-      def sys_clear_all_state; end
-
-      sig { params(millis: Integer, name: T.nilable(String)).returns(Integer) }
-      def sys_sleep(millis, name = nil); end
-
-      sig do
-        params(
-          service: String,
-          handler: String,
-          buffer: String,
-          key: T.nilable(String),
-          idempotency_key: T.nilable(String),
-          headers: T.nilable(T::Array[T::Array[String]])
-        ).returns(CallHandle)
-      end
-      def sys_call(service, handler, buffer, key = nil, idempotency_key = nil, headers = nil); end
-
-      sig do
-        params(
-          service: String,
-          handler: String,
-          buffer: String,
-          key: T.nilable(String),
-          delay: T.nilable(Integer),
-          idempotency_key: T.nilable(String),
-          headers: T.nilable(T::Array[T::Array[String]])
-        ).returns(Integer)
-      end
-      def sys_send(service, handler, buffer, key = nil, delay = nil, idempotency_key = nil, headers = nil); end
-
-      sig { params(name: String).returns(Integer) }
-      def sys_run(name); end
-
-      sig { params(handle: Integer, buffer: String).void }
-      def propose_run_completion_success(handle, buffer); end
-
-      sig { params(handle: Integer, failure: Failure).void }
-      def propose_run_completion_failure(handle, failure); end
-
-      sig do
-        params(
-          handle: Integer,
-          failure: Failure,
-          attempt_duration: Integer,
-          config: ExponentialRetryConfig
-        ).void
-      end
-      def propose_run_completion_failure_transient(handle, failure, attempt_duration, config); end
-
-      sig { params(buffer: String).void }
-      def sys_write_output_success(buffer); end
-
-      sig { params(failure: Failure).void }
-      def sys_write_output_failure(failure); end
-
-      sig { void }
-      def sys_end; end
-
-      sig { returns(T::Boolean) }
-      def is_replaying; end
-
-      sig { returns(T.untyped) }
-      def sys_awakeable; end
-
-      sig { params(id: String, buffer: String).void }
-      def sys_complete_awakeable_success(id, buffer); end
-
-      sig { params(id: String, failure: Failure).void }
-      def sys_complete_awakeable_failure(id, failure); end
-
-      sig { params(key: String).returns(Integer) }
-      def sys_get_promise(key); end
-
-      sig { params(key: String).returns(Integer) }
-      def sys_peek_promise(key); end
-
-      sig { params(key: String, buffer: String).returns(Integer) }
-      def sys_complete_promise_success(key, buffer); end
-
-      sig { params(key: String, failure: Failure).returns(Integer) }
-      def sys_complete_promise_failure(key, failure); end
-
-      sig { params(invocation_id: String).void }
-      def sys_cancel_invocation(invocation_id); end
+      def verify(path, headers); end
     end
   end
+
+  # VM wrapper result types (defined in Ruby in vm.rb but referenced as bare constants
+  # from the native extension which Sorbet can't see through)
+  class VMError < StandardError; end
+  class Failure; end
+  class ExponentialRetryConfig; end
+  class StateKeys; end
+  class Void; end
+  class Suspended; end
+  class DoProgressAnyCompleted; end
+  class DoProgressReadFromInput; end
+  class DoProgressExecuteRun; end
+  class DoProgressCancelSignalReceived; end
+  class DoWaitForPendingRun; end
+
+  # Additional types referenced by server_context.rb and endpoint.rb
+  class NotReady; end
+  class DoWaitPendingRun; end
+  class RunRetryConfig; end
+  class Server
+    def initialize(endpoint); end
+  end
+
+  # Server-level types
+  class IdentityVerificationError < StandardError; end
+  SDK_VERSION = T.let('', String)
 end
