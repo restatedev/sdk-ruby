@@ -21,7 +21,7 @@ class CancelTestRunner < Restate::VirtualObject
 end
 
 class CancelTestBlockingService < Restate::VirtualObject # rubocop:disable Style/OneClassPerFile
-  handler def block(op) # rubocop:disable Metrics/MethodLength,Naming/MethodParameterName
+  handler def block(op) # rubocop:disable Metrics/AbcSize,Metrics/MethodLength,Naming/MethodParameterName
     id, awk_future = Restate.awakeable
     AwakeableHolder.call(Restate.key).hold(id).await
     awk_future.await
