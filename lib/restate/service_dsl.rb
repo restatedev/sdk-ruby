@@ -105,7 +105,7 @@ module Restate
       if name
         @_service_name = name
       else
-        @_service_name || self.name&.split('::')&.last
+        @_service_name ||= self.name&.split('::')&.last # rubocop:disable Naming/MemoizedInstanceVariableName
       end
     end
 

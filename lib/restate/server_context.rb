@@ -44,7 +44,7 @@ module Restate
       in_buffer = @invocation.input_buffer
       out_buffer = Restate.invoke_handler(handler: @handler, ctx: self, in_buffer: in_buffer,
                                           middleware: @middleware)
-      @vm.sys_write_output_success(out_buffer.b)
+      @vm.sys_write_output_success(out_buffer)
       @vm.sys_end
     rescue TerminalError => e
       failure = Failure.new(code: e.status_code, message: e.message)
@@ -104,7 +104,7 @@ module Restate
 
     # Durably sets a state entry. The value is serialized via +serde+.
     def set(name, value, serde: JsonSerde)
-      @vm.sys_set_state(name, serde.serialize(value).b)
+      @vm.sys_set_state(name, serde.serialize(value))
     end
 
     # Durably removes a single state entry by name.
@@ -163,16 +163,7 @@ module Restate
     def wait_any(*futures)
       handles = futures.map(&:handle)
       wait_any_handle(handles)
-      completed = []
-      remaining = []
-      futures.each do |f|
-        if f.completed?
-          completed << f
-        else
-          remaining << f
-        end
-      end
-      [completed, remaining]
+      futures.partition(&:completed?)
     end
 
     # ── Durable run (side effect) ──
@@ -186,8 +177,12 @@ module Restate
     def run(name, serde: JsonSerde, retry_policy: nil, background: false, &action)
       handle = @vm.sys_run(name)
 
-      executor = background ? :execute_run_threaded : :execute_run
-      @run_coros_to_execute[handle] = -> { send(executor, handle, action, serde, retry_policy) }
+      @run_coros_to_execute[handle] =
+        if background
+          -> { execute_run_threaded(handle, action, serde, retry_policy) }
+        else
+          -> { execute_run(handle, action, serde, retry_policy) }
+        end
 
       DurableFuture.new(self, handle, serde: serde)
     end
@@ -210,7 +205,7 @@ module Restate
       out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
       parameter = in_serde.serialize(arg)
       call_handle = @vm.sys_call(
-        service: svc_name, handler: handler_name, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
@@ -225,7 +220,7 @@ module Restate
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
       invocation_id_handle = @vm.sys_send(
-        service: svc_name, handler: handler_name, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
       SendHandle.new(self, invocation_id_handle)
@@ -239,7 +234,7 @@ module Restate
       out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
       parameter = in_serde.serialize(arg)
       call_handle = @vm.sys_call(
-        service: svc_name, handler: handler_name, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
@@ -254,7 +249,7 @@ module Restate
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
       invocation_id_handle = @vm.sys_send(
-        service: svc_name, handler: handler_name, parameter: parameter.b,
+        service: svc_name, handler: handler_name, parameter: parameter,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
       SendHandle.new(self, invocation_id_handle)
@@ -284,7 +279,7 @@ module Restate
 
     # Resolves an awakeable with a success value.
     def resolve_awakeable(awakeable_id, payload, serde: JsonSerde)
-      @vm.sys_complete_awakeable_success(awakeable_id, serde.serialize(payload).b)
+      @vm.sys_complete_awakeable_success(awakeable_id, serde.serialize(payload))
     end
 
     # Rejects an awakeable with a terminal failure.
@@ -313,7 +308,7 @@ module Restate
 
     # Resolves a durable promise with a success value.
     def resolve_promise(name, payload, serde: JsonSerde)
-      handle = @vm.sys_complete_promise_success(name, serde.serialize(payload).b)
+      handle = @vm.sys_complete_promise_success(name, serde.serialize(payload))
       poll_and_take(handle)
       nil
     end
@@ -338,7 +333,7 @@ module Restate
     # Durably calls a handler using raw bytes (no serialization). Useful for proxying.
     def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
       call_handle = @vm.sys_call(
-        service: service, handler: handler, parameter: arg.b,
+        service: service, handler: handler, parameter: arg,
         key: key, idempotency_key: idempotency_key, headers: headers
       )
       DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
@@ -349,7 +344,7 @@ module Restate
     def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
       delay_ms = delay ? (delay * 1000).to_i : nil
       invocation_id_handle = @vm.sys_send(
-        service: service, handler: handler, parameter: arg.b,
+        service: service, handler: handler, parameter: arg,
         key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
       )
       SendHandle.new(self, invocation_id_handle)
@@ -463,24 +458,26 @@ module Restate
     # Resolves a service+handler pair from class/symbol or string/string.
     # Returns [service_name, handler_name, handler_metadata_or_nil].
     def resolve_call_target(service, handler)
+      handler_name = handler.is_a?(Symbol) ? handler.name : handler.to_s
       if service.is_a?(Class) && service.respond_to?(:service_name)
         svc_name = service.service_name
-        handler_name = handler.to_s
         handler_meta = service.respond_to?(:handlers) ? service.handlers[handler_name] : nil
         [svc_name, handler_name, handler_meta]
       else
-        [service.to_s, handler.to_s, nil]
+        [service.to_s, handler_name, nil]
       end
     end
 
     # Resolves a serde value: if the caller passed NOT_SET, fall back to handler metadata, then JsonSerde.
     def resolve_serde(caller_serde, handler_meta, field)
       return caller_serde unless caller_serde.equal?(NOT_SET)
+      return JsonSerde unless handler_meta
 
-      if handler_meta
-        handler_meta.handler_io.public_send(field)
-      else
-        JsonSerde
+      io = handler_meta.handler_io
+      case field
+      when :input_serde then io.input_serde
+      when :output_serde then io.output_serde
+      else JsonSerde
       end
     end
 
@@ -502,7 +499,7 @@ module Restate
       begin
         result = action.call
         buffer = serde.serialize(result)
-        @vm.propose_run_completion_success(handle, buffer.b)
+        @vm.propose_run_completion_success(handle, buffer)
       rescue TerminalError => e
         failure = Failure.new(code: e.status_code, message: e.message)
         @vm.propose_run_completion_failure(handle, failure)

@@ -253,7 +253,7 @@ module Restate
       env.each do |key, value|
         next unless key.start_with?('HTTP_')
 
-        header_name = key.sub('HTTP_', '').tr('_', '-').downcase
+        header_name = key.byteslice(5..).tr('_', '-').downcase!
         headers << [header_name, value]
       end
       # Also include content-type and content-length if present

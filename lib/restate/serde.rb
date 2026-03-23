@@ -4,6 +4,9 @@
 require 'json'
 
 module Restate
+  EMPTY_BYTES = ''.b.freeze
+  private_constant :EMPTY_BYTES
+
   # JSON serializer/deserializer (default).
   # Converts Ruby objects to JSON byte strings and back.
   module JsonSerde
@@ -11,7 +14,7 @@ module Restate
 
     # Serialize a Ruby object to a JSON byte string. Returns empty bytes for nil.
     def serialize(obj)
-      return ''.b if obj.nil?
+      return EMPTY_BYTES if obj.nil?
 
       JSON.generate(obj).b
     end
@@ -39,7 +42,7 @@ module Restate
 
     # Serialize an object by returning its binary encoding. Returns empty bytes for nil.
     def serialize(obj)
-      return ''.b if obj.nil?
+      return EMPTY_BYTES if obj.nil?
 
       obj.b
     end
@@ -57,14 +60,14 @@ module Restate
 
   # Maps Ruby primitive types to JSON Schema snippets for discovery.
   PRIMITIVE_SCHEMAS = {
-    String => { 'type' => 'string' },
-    Integer => { 'type' => 'integer' },
-    Float => { 'type' => 'number' },
-    TrueClass => { 'type' => 'boolean' },
-    FalseClass => { 'type' => 'boolean' },
-    Array => { 'type' => 'array' },
-    Hash => { 'type' => 'object' },
-    NilClass => { 'type' => 'null' }
+    String => { 'type' => 'string' }.freeze,
+    Integer => { 'type' => 'integer' }.freeze,
+    Float => { 'type' => 'number' }.freeze,
+    TrueClass => { 'type' => 'boolean' }.freeze,
+    FalseClass => { 'type' => 'boolean' }.freeze,
+    Array => { 'type' => 'array' }.freeze,
+    Hash => { 'type' => 'object' }.freeze,
+    NilClass => { 'type' => 'null' }.freeze
   }.freeze
 
   # Serde resolution utilities: converts a type or serde into a serde object.
@@ -181,7 +184,7 @@ module Restate
 
     # Serialize a Dry::Struct (or hash-like object) to JSON bytes.
     def serialize(obj)
-      return ''.b if obj.nil?
+      return EMPTY_BYTES if obj.nil?
 
       hash = obj.respond_to?(:to_h) ? obj.to_h : obj
       JSON.generate(hash).b
