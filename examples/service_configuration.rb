@@ -1,4 +1,3 @@
-# typed: true
 # frozen_string_literal: true
 
 #
@@ -20,17 +19,8 @@
 
 require 'restate'
 
-class OrderRequest < T::Struct
-  const :item, String
-  const :quantity, Integer
-end
-
-class OrderStatus < T::Struct
-  const :order_id, String
-  const :item, String
-  const :quantity, Integer
-  const :status, String
-end
+OrderRequest = Data.define(:item, :quantity)
+OrderStatus = Data.define(:order_id, :item, :quantity, :status)
 
 class OrderProcessor < Restate::VirtualObject
   # ── Service-level configuration ──
