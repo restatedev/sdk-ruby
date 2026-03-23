@@ -675,6 +675,34 @@ endpoint.use(AuthMiddleware, api_key: 'secret')
 
 Middleware executes in registration order. Each wraps the next, forming an onion around the handler.
 
+### Outbound (client) middleware
+
+Outbound middleware wraps every outgoing service call and send, following the
+[Sidekiq client middleware](https://github.com/sidekiq/sidekiq/wiki/Middleware) pattern. Register
+with `use_outbound`:
+
+```ruby
+class TenantOutboundMiddleware
+  def call(_service, _handler, headers)
+    headers['x-tenant-id'] = Thread.current[:tenant_id]
+    yield
+  end
+end
+
+endpoint.use_outbound(TenantOutboundMiddleware)
+```
+
+**Available in `call`:**
+- `service` — target service name (String)
+- `handler` — target handler name (String)
+- `headers` — mutable Hash; modify it to attach headers to the outgoing request
+
+Use `yield` to continue the chain. Not yielding would skip the call.
+
+> **Note:** Restate automatically propagates inbound headers to outgoing calls. Outbound middleware
+> is for injecting *new* headers that aren't on the original request (e.g., tenant IDs from
+> fiber-local storage, authorization tokens for specific target services).
+
 See [`middleware_example/`](../middleware_example/) for a complete working example with real
 OpenTelemetry tracing and tenant isolation.
 
@@ -1162,8 +1190,9 @@ handle.cancel
 ### Middleware
 
 ```ruby
-endpoint.use(MyMiddleware)            # Register middleware
+endpoint.use(MyMiddleware)            # Inbound (server) middleware
 endpoint.use(MyMiddleware, arg: val)  # With constructor args
+endpoint.use_outbound(MyOutbound)     # Outbound (client) middleware
 ```
 
 ### HTTP Client (External Invocation)
