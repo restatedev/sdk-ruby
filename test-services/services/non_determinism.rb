@@ -11,7 +11,7 @@ def do_left_action # rubocop:disable Naming/PredicateMethod
 end
 
 def increment_counter
-  Restate.object_send(Counter, :add, Restate.key, 1)
+  Counter.send!(Restate.key).add(1)
 end
 
 class NonDeterministic < Restate::VirtualObject

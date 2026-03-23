@@ -5,7 +5,7 @@ require 'restate'
 class CancelTestRunner < Restate::VirtualObject
   handler def startTest(op) # rubocop:disable Naming/MethodName,Naming/MethodParameterName
     begin
-      Restate.object_call(CancelTestBlockingService, :block, Restate.key, op).await
+      CancelTestBlockingService.call(Restate.key).block(op).await
     rescue Restate::TerminalError => e
       raise e unless e.status_code == 409
 
@@ -23,12 +23,12 @@ end
 class CancelTestBlockingService < Restate::VirtualObject # rubocop:disable Style/OneClassPerFile
   handler def block(op) # rubocop:disable Metrics/MethodLength,Naming/MethodParameterName
     id, awk_future = Restate.awakeable
-    Restate.object_call('AwakeableHolder', 'hold', Restate.key, id).await
+    AwakeableHolder.call(Restate.key).hold(id).await
     awk_future.await
 
     case op
     when 'CALL'
-      Restate.object_call('CancelTestBlockingService', 'block', Restate.key, op).await
+      CancelTestBlockingService.call(Restate.key).block(op).await
     when 'SLEEP'
       Restate.sleep(1_024 * 24 * 60 * 60).await
     when 'AWAKEABLE'

@@ -8,7 +8,7 @@ class Failing < Restate::VirtualObject
   end
 
   handler def callTerminallyFailingCall(msg) # rubocop:disable Naming/MethodName
-    Restate.object_call('Failing', 'terminallyFailingCall', 'random-583e1bf2', msg).await
+    Failing.call('random-583e1bf2').terminallyFailingCall(msg).await
     raise 'Should not reach here'
   end
 

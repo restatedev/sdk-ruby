@@ -4,7 +4,7 @@ require 'restate'
 
 class KillTestRunner < Restate::VirtualObject
   handler def startCallTree # rubocop:disable Naming/MethodName
-    Restate.object_call(KillTestSingleton, :recursiveCall, Restate.key, nil).await
+    KillTestSingleton.call(Restate.key).recursiveCall.await
     nil
   end
 end
@@ -12,10 +12,10 @@ end
 class KillTestSingleton < Restate::VirtualObject # rubocop:disable Style/OneClassPerFile
   handler def recursiveCall # rubocop:disable Naming/MethodName
     id, awk_future = Restate.awakeable
-    Restate.object_send('AwakeableHolder', 'hold', Restate.key, id)
+    AwakeableHolder.send!(Restate.key).hold(id)
     awk_future.await
 
-    Restate.object_call('KillTestSingleton', 'recursiveCall', Restate.key, nil).await
+    KillTestSingleton.call(Restate.key).recursiveCall.await
     nil
   end
 
