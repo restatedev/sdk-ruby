@@ -1,4 +1,3 @@
-# typed: ignore # rubocop:disable Sorbet/FalseSigil
 # frozen_string_literal: true
 
 #

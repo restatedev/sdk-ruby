@@ -1,4 +1,3 @@
-# typed: false
 # frozen_string_literal: true
 
 # Serves all example services on a single endpoint.
@@ -15,7 +14,6 @@ require_relative 'virtual_objects'
 require_relative 'workflow'
 require_relative 'service_communication'
 require_relative 'typed_handlers'
-require_relative 'typed_handlers_sorbet'
 require_relative 'service_configuration'
 
 endpoint = Restate.endpoint(
@@ -25,7 +23,6 @@ endpoint = Restate.endpoint(
   UserSignup,
   Worker, FanOut,
   TicketService,
-  EventService,
   OrderProcessor
 )
 

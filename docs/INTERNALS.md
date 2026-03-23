@@ -47,7 +47,7 @@ lib/
     ├── endpoint.rb                  Endpoint — holds services, builds Rack app
     ├── errors.rb                    TerminalError, SuspendedError, InternalError, DisconnectedError
     ├── handler.rb                   Handler, HandlerIO, ServiceTag structs + invoke_handler
-    ├── serde.rb                     JsonSerde, BytesSerde, TStructSerde, DryStructSerde, serde resolution
+    ├── serde.rb                     JsonSerde, BytesSerde, DryStructSerde, serde resolution
     ├── server.rb                    Rack 3 app — routes, I/O streaming, Async tasks
     ├── server_context.rb            ctx object — state, sleep, run, calls, progress loop
     ├── client.rb                    HTTP client for external invocation (Restate::Client)
@@ -58,12 +58,6 @@ lib/
     ├── testing.rb                   Test harness (opt-in: require 'restate/testing')
     ├── vm.rb                        VMWrapper — Ruby bridge to native VM
     └── workflow.rb                  Workflow class + main/handler DSL + .call/.send!
-lib/tapioca/dsl/compilers/
-└── restate.rb                       Tapioca DSL compiler — generates typed handler sigs
-
-rbi/
-└── restate-sdk.rbi                  Shipped RBI — Tapioca auto-discovers via `tapioca gems`
-
 ext/restate_internal/
 ├── Cargo.toml                       Depends on restate-sdk-shared-core 0.7.0, magnus 0.7
 └── src/lib.rs                       Rust ↔ Ruby bindings (~1095 lines)
@@ -87,8 +81,7 @@ examples/                            Runnable examples showcasing SDK features
 ├── workflow.rb                      Promises, signals, workflow state
 ├── service_communication.rb         Calls, sends, fan-out, wait_any, awakeables
 ├── service_configuration.rb         Service-level config: timeouts, retention, retry policy
-├── typed_handlers.rb               Dry::Struct input/output, JSON Schema generation
-└── typed_handlers_sorbet.rb        T::Struct (Sorbet) input/output, JSON Schema generation
+└── typed_handlers.rb               Dry::Struct input/output, JSON Schema generation
 
 middleware_example/                   Self-contained middleware example (own Gemfile)
 ├── config.ru                        OTel + tenant middleware wiring
@@ -262,15 +255,11 @@ Useful for long-running handlers that need to flush work or perform cleanup befo
 - **`NOT_SET`** — frozen sentinel to distinguish "caller didn't pass serde" from `nil`.
 - **`Serde.resolve(type_or_serde)`** — resolves a type class or serde object into a serde
   with `serialize`/`deserialize`/`json_schema`. Priority: already a serde → use directly;
-  `T::Struct` subclass → `TStructSerde`; `Dry::Struct` subclass → `DryStructSerde`;
+  `Dry::Struct` subclass → `DryStructSerde`;
   primitive type → `TypeSerde` with schema; class with `.json_schema` → `TypeSerde`;
   fallback → `JsonSerde`.
 - **`TypeSerde`** — wraps a primitive type or custom-schema class. Delegates to `JsonSerde`
   for serialize/deserialize, adds `json_schema` from the type.
-- **`TStructSerde`** — for `T::Struct` subclasses (Sorbet). Deserializes JSON via
-  `T::Struct.from_hash`, serializes via `T::Struct#serialize`. Generates JSON Schema by
-  introspecting Sorbet `T::Types` (handles `Simple`, `Union`/nilable, `TypedArray`,
-  `TypedHash`, nested structs).
 - **`DryStructSerde`** — for `Dry::Struct` subclasses. Deserializes JSON into struct instances
   via `Struct.new(**hash)`, serializes via `to_h` + `JSON.generate`. Generates JSON Schema
   by introspecting dry-types (handles Nominal, Sum/optional, Array::Member, Constrained,
@@ -694,8 +683,7 @@ curl localhost:8080/Signup/user1/run -H 'content-type: application/json' -d '"us
 
 - **Falcon not responding to curl**: Falcon uses HTTP/2. Use `--http2-prior-knowledge` or go
   through the Restate ingress (port 8080) which handles protocol negotiation.
-- **Worker crashes on startup**: Check Falcon logs (JSON to stdout). Common cause: Sorbet runtime
-  `NameError` from eager sig evaluation — ensure all types referenced in sigs are loaded.
+- **Worker crashes on startup**: Check Falcon logs (JSON to stdout) for error details.
 - **Port stuck after crash**: `lsof -ti :9080 | xargs kill -9`
 - **Restate can't reach Falcon**: If Restate runs in Docker, bind Falcon to `0.0.0.0` not
   `localhost`, and use the host machine's IP in the registration URI.
@@ -773,8 +761,3 @@ lsof -ti :9080 | xargs kill -9
 
 Use `-n 1` flag for single worker during development.
 
-### 9. Sorbet Eager Sig Evaluation
-
-Sorbet sigs are evaluated eagerly at class load time. If a sig references a class that hasn't
-been `require`d yet, you get `NameError` at runtime (even though `srb tc` passes). Fix: use
-`T.untyped` for return types of methods that lazy-load their dependencies.

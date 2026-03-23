@@ -1,4 +1,4 @@
-# typed: true
+# typed: ignore
 # frozen_string_literal: true
 
 require 'async'
@@ -14,21 +14,17 @@ module Restate
   #   GET  /health                       → health check
   #   POST /invoke/:service/:handler     → handler invocation
   class Server
-    extend T::Sig
+    SDK_VERSION = Internal::SDK_VERSION
+    X_RESTATE_SERVER = "restate-sdk-ruby/#{SDK_VERSION}".freeze
 
-    SDK_VERSION = T.let(Internal::SDK_VERSION, String)
-    X_RESTATE_SERVER = T.let("restate-sdk-ruby/#{SDK_VERSION}".freeze, String)
+    LOGGER = Logger.new($stdout, progname: 'Restate::Server')
 
-    LOGGER = T.let(Logger.new($stdout, progname: 'Restate::Server'), Logger)
-
-    sig { params(endpoint: Endpoint).void }
     def initialize(endpoint)
-      @endpoint = T.let(endpoint, Endpoint)
-      @identity_verifier = T.let(Internal::IdentityVerifier.new(endpoint.identity_keys), Internal::IdentityVerifier)
+      @endpoint = endpoint
+      @identity_verifier = Internal::IdentityVerifier.new(endpoint.identity_keys)
     end
 
     # Rack interface
-    sig { params(env: T::Hash[String, T.untyped]).returns(T.untyped) }
     def call(env)
       path = env['PATH_INFO'] || '/'
       parsed = parse_path(path)
@@ -51,7 +47,6 @@ module Restate
 
     private
 
-    sig { params(path: String).returns(T::Hash[Symbol, T.untyped]) }
     def parse_path(path)
       segments = path.split('/').reject(&:empty?)
 
@@ -77,22 +72,18 @@ module Restate
       end
     end
 
-    sig { returns(T.untyped) }
     def health_response
       [200, { 'content-type' => 'application/json', 'x-restate-server' => X_RESTATE_SERVER }, ['{"status":"ok"}']]
     end
 
-    sig { returns(T.untyped) }
     def not_found_response
       [404, { 'x-restate-server' => X_RESTATE_SERVER }, ['']]
     end
 
-    sig { params(status: Integer, message: String).returns(T.untyped) }
     def error_response(status, message)
       [status, { 'content-type' => 'text/plain', 'x-restate-server' => X_RESTATE_SERVER }, [message]]
     end
 
-    sig { params(env: T::Hash[String, T.untyped]).returns(T.untyped) }
     def handle_discover(env)
       # Detect HTTP version for protocol mode
       http_version = env['HTTP_VERSION'] || env['SERVER_PROTOCOL'] || 'HTTP/1.1'
@@ -119,7 +110,6 @@ module Restate
       end
     end
 
-    sig { params(accept: String).returns(T.nilable(Integer)) }
     def negotiate_version(accept)
       if accept.include?('application/vnd.restate.endpointmanifest.v4+json')
         4
@@ -132,7 +122,6 @@ module Restate
       end
     end
 
-    sig { params(env: T::Hash[String, T.untyped], service_name: T.untyped, handler_name: T.untyped).returns(T.untyped) }
     def handle_invocation(env, service_name, handler_name)
       # Verify identity
       request_headers = extract_headers(env)
@@ -154,7 +143,6 @@ module Restate
       process_invocation(env, handler, request_headers)
     end
 
-    sig { params(env: T::Hash[String, T.untyped], handler: T.untyped, request_headers: T.untyped).returns(T.untyped) }
     def process_invocation(env, handler, request_headers)
       vm = VMWrapper.new(request_headers)
       status, response_headers = vm.get_response_head
@@ -171,7 +159,7 @@ module Restate
       # Read request body chunks and feed to VM until ready to execute,
       # then continue feeding remaining chunks via the input queue.
       rack_input = env['rack.input']
-      ready = T.let(false, T::Boolean)
+      ready = false
       if rack_input
         # Feed chunks until the VM has enough to start execution
         while (chunk = rack_input.read_partial(16_384))
@@ -246,11 +234,8 @@ module Restate
     # Rack 3 streaming body that yields chunks from an Async::Queue.
     # Terminates when nil is dequeued.
     class StreamingBody
-      extend T::Sig
-
-      sig { params(queue: Async::Queue).void }
       def initialize(queue)
-        @queue = T.let(queue, Async::Queue)
+        @queue = queue
       end
 
       def each
@@ -263,9 +248,8 @@ module Restate
       end
     end
 
-    sig { params(env: T::Hash[String, T.untyped]).returns(T::Array[T::Array[String]]) }
     def extract_headers(env)
-      headers = T.let([], T::Array[T::Array[String]])
+      headers = []
       env.each do |key, value|
         next unless key.start_with?('HTTP_')
 

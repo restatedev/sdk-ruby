@@ -1,4 +1,3 @@
-# typed: false
 # frozen_string_literal: true
 
 #
@@ -11,7 +10,7 @@
 # Invoke:
 #   curl localhost:8080/Greeter/greet \
 #     -H 'content-type: application/json' \
-#     -d '{"name": "World"}'
+#     -d '"World"'
 #
 
 require_relative 'greeter'

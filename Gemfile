@@ -15,9 +15,8 @@ group :development, :test do
   gem 'falcon', '~> 0.47', require: false
   gem 'rspec', '~> 3.12'
   gem 'rubocop', require: false
-  gem 'rubocop-sorbet', require: false
   gem 'sorbet', require: false
-  gem 'tapioca', require: false
+  gem 'steep', require: false
   gem 'testcontainers-core', require: false
 
   # For middleware_example/

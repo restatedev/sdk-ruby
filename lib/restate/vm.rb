@@ -1,4 +1,4 @@
-# typed: true
+# typed: ignore
 # frozen_string_literal: true
 
 begin
@@ -19,9 +19,9 @@ module Restate
   class NotReady; end
   class Suspended; end
 
-  NOT_READY = T.let(NotReady.new.freeze, NotReady)
-  SUSPENDED = T.let(Suspended.new.freeze, Suspended)
-  CANCEL_HANDLE = T.let(Internal::CANCEL_NOTIFICATION_HANDLE, Integer)
+  NOT_READY = NotReady.new.freeze
+  SUSPENDED = Suspended.new.freeze
+  CANCEL_HANDLE = Internal::CANCEL_NOTIFICATION_HANDLE
 
   # Progress loop result types
   class DoProgressAnyCompleted; end
@@ -29,10 +29,10 @@ module Restate
   class DoProgressCancelSignalReceived; end
   class DoWaitPendingRun; end
 
-  DO_PROGRESS_ANY_COMPLETED = T.let(DoProgressAnyCompleted.new.freeze, DoProgressAnyCompleted)
-  DO_PROGRESS_READ_FROM_INPUT = T.let(DoProgressReadFromInput.new.freeze, DoProgressReadFromInput)
-  DO_PROGRESS_CANCEL_SIGNAL_RECEIVED = T.let(DoProgressCancelSignalReceived.new.freeze, DoProgressCancelSignalReceived)
-  DO_WAIT_PENDING_RUN = T.let(DoWaitPendingRun.new.freeze, DoWaitPendingRun)
+  DO_PROGRESS_ANY_COMPLETED = DoProgressAnyCompleted.new.freeze
+  DO_PROGRESS_READ_FROM_INPUT = DoProgressReadFromInput.new.freeze
+  DO_PROGRESS_CANCEL_SIGNAL_RECEIVED = DoProgressCancelSignalReceived.new.freeze
+  DO_WAIT_PENDING_RUN = DoWaitPendingRun.new.freeze
 
   DoProgressExecuteRun = Struct.new(:handle, keyword_init: true)
 
@@ -52,50 +52,39 @@ module Restate
 
   # Wraps the native Restate::Internal::VM, mapping native types to Ruby types.
   class VMWrapper
-    extend T::Sig
-
-    sig { params(headers: T.untyped).void }
     def initialize(headers)
-      @vm = T.let(Internal::VM.new(headers), Internal::VM)
+      @vm = Internal::VM.new(headers)
     end
 
-    sig { returns([Integer, T.untyped]) }
     def get_response_head
       result = @vm.get_response_head
       [result.status_code, result.headers]
     end
 
-    sig { params(buf: String).void }
     def notify_input(buf)
       @vm.notify_input(buf)
     end
 
-    sig { void }
     def notify_input_closed
       @vm.notify_input_closed
     end
 
-    sig { params(error: String, stacktrace: T.nilable(String)).void }
     def notify_error(error, stacktrace = nil)
       @vm.notify_error(error, stacktrace)
     end
 
-    sig { returns(T.nilable(String)) }
     def take_output
       @vm.take_output
     end
 
-    sig { returns(T::Boolean) }
     def is_ready_to_execute
       @vm.is_ready_to_execute
     end
 
-    sig { params(handle: Integer).returns(T::Boolean) }
     def is_completed(handle)
       @vm.is_completed(handle)
     end
 
-    sig { params(handles: T::Array[Integer]).returns(T.untyped) }
     def do_progress(handles)
       result = @vm.do_progress(handles)
       map_do_progress(result)
@@ -103,7 +92,6 @@ module Restate
       e
     end
 
-    sig { params(handle: Integer).returns(T.untyped) }
     def take_notification(handle)
       result = @vm.take_notification(handle)
       map_notification(result)
@@ -111,7 +99,6 @@ module Restate
       e
     end
 
-    sig { returns(T.untyped) }
     def sys_input
       inp = @vm.sys_input
       headers = inp.headers.map { |h| [h.key, h.value] }
@@ -124,94 +111,56 @@ module Restate
       )
     end
 
-    sig { params(name: String).returns(Integer) }
     def sys_get_state(name)
       @vm.sys_get_state(name)
     end
 
-    sig { returns(Integer) }
     def sys_get_state_keys
       @vm.sys_get_state_keys
     end
 
-    sig { params(name: String, value: String).void }
     def sys_set_state(name, value)
       @vm.sys_set_state(name, value)
     end
 
-    sig { params(name: String).void }
     def sys_clear_state(name)
       @vm.sys_clear_state(name)
     end
 
-    sig { void }
     def sys_clear_all_state
       @vm.sys_clear_all_state
     end
 
-    sig { params(millis: Integer, name: T.nilable(String)).returns(Integer) }
     def sys_sleep(millis, name = nil)
       # Rust side always expects 2 args: (millis, name_or_nil)
       @vm.sys_sleep(millis, name)
     end
 
-    sig do
-      params(
-        service: String,
-        handler: String,
-        parameter: String,
-        key: T.nilable(String),
-        idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
-      ).returns(Internal::CallHandle)
-    end
     def sys_call(service:, handler:, parameter:, key: nil, idempotency_key: nil, headers: nil)
       # Rust side expects 6 args: (service, handler, buffer, key_or_nil, idem_key_or_nil, headers_or_nil)
       hdr_array = headers&.map { |k, v| [k, v] }
       @vm.sys_call(service, handler, parameter, key, idempotency_key, hdr_array)
     end
 
-    sig do
-      params(
-        service: String,
-        handler: String,
-        parameter: String,
-        key: T.nilable(String),
-        delay: T.nilable(Integer),
-        idempotency_key: T.nilable(String),
-        headers: T.nilable(T::Hash[String, String])
-      ).returns(Integer)
-    end
     def sys_send(service:, handler:, parameter:, key: nil, delay: nil, idempotency_key: nil, headers: nil)
       # Rust side expects 7 args
       hdr_array = headers&.map { |k, v| [k, v] }
       @vm.sys_send(service, handler, parameter, key, delay, idempotency_key, hdr_array)
     end
 
-    sig { params(name: String).returns(Integer) }
     def sys_run(name)
       @vm.sys_run(name)
     end
 
-    sig { params(handle: Integer, output: String).void }
     def propose_run_completion_success(handle, output)
       @vm.propose_run_completion_success(handle, output)
     end
 
-    sig { params(handle: Integer, failure: T.untyped).void }
     def propose_run_completion_failure(handle, failure)
       native_failure = Internal::Failure.new(failure.code, failure.message, nil)
       @vm.propose_run_completion_failure(handle, native_failure)
     end
 
-    sig do
-      params(
-        handle: Integer,
-        failure: T.untyped,
-        attempt_duration_ms: Integer,
-        config: T.untyped
-      ).void
-    end
     def propose_run_completion_transient(handle, failure:, attempt_duration_ms:, config:)
       native_failure = Internal::Failure.new(failure.code, failure.message, failure.stacktrace)
       native_config = Internal::ExponentialRetryConfig.new(
@@ -222,73 +171,60 @@ module Restate
       @vm.propose_run_completion_failure_transient(handle, native_failure, attempt_duration_ms, native_config)
     end
 
-    sig { params(output: String).void }
     def sys_write_output_success(output)
       @vm.sys_write_output_success(output)
     end
 
-    sig { params(failure: T.untyped).void }
     def sys_write_output_failure(failure)
       native_failure = Internal::Failure.new(failure.code, failure.message, nil)
       @vm.sys_write_output_failure(native_failure)
     end
 
-    sig { void }
     def sys_end
       @vm.sys_end
     end
 
-    sig { returns(T::Boolean) }
     def is_replaying
       @vm.is_replaying
     end
 
     # Returns [awakeable_id (String), notification_handle (Integer)]
-    sig { returns([String, Integer]) }
     def sys_awakeable
       @vm.sys_awakeable
     end
 
-    sig { params(awakeable_id: String, value: String).void }
     def sys_complete_awakeable_success(awakeable_id, value)
       @vm.sys_complete_awakeable_success(awakeable_id, value)
     end
 
-    sig { params(awakeable_id: String, failure: T.untyped).void }
     def sys_complete_awakeable_failure(awakeable_id, failure)
       native_failure = Internal::Failure.new(failure.code, failure.message, nil)
       @vm.sys_complete_awakeable_failure(awakeable_id, native_failure)
     end
 
-    sig { params(key: String).returns(Integer) }
     def sys_get_promise(key)
       @vm.sys_get_promise(key)
     end
 
-    sig { params(key: String).returns(Integer) }
     def sys_peek_promise(key)
       @vm.sys_peek_promise(key)
     end
 
-    sig { params(key: String, value: String).returns(Integer) }
     def sys_complete_promise_success(key, value)
       @vm.sys_complete_promise_success(key, value)
     end
 
-    sig { params(key: String, failure: T.untyped).returns(Integer) }
     def sys_complete_promise_failure(key, failure)
       native_failure = Internal::Failure.new(failure.code, failure.message, nil)
       @vm.sys_complete_promise_failure(key, native_failure)
     end
 
-    sig { params(invocation_id: String).void }
     def sys_cancel_invocation(invocation_id)
       @vm.sys_cancel_invocation(invocation_id)
     end
 
     private
 
-    sig { params(result: T.untyped).returns(T.untyped) }
     def map_do_progress(result)
       case result
       when Internal::Suspended
@@ -308,7 +244,6 @@ module Restate
       end
     end
 
-    sig { params(result: T.untyped).returns(T.untyped) }
     def map_notification(result)
       case result
       when Internal::Suspended

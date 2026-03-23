@@ -27,18 +27,12 @@ module Restate
     keyword_init: true
   )
 
-  extend T::Sig
-
   module_function
 
   # Invoke a handler with the context and raw input bytes.
   # The context is passed as the first argument to every handler.
   # Middleware (if any) wraps the handler call.
   # Returns raw output bytes.
-  sig do
-    params(handler: T.untyped, ctx: T.untyped, in_buffer: String,
-           middleware: T::Array[T.untyped]).returns(String)
-  end
   def invoke_handler(handler:, ctx:, in_buffer:, middleware: []) # rubocop:disable Metrics/AbcSize
     call_handler = Kernel.proc do
       if handler.arity == 1
