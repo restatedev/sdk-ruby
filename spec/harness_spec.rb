@@ -99,6 +99,31 @@ class MiddlewareTestService < Restate::Service
   end
 end
 
+# ── Outbound middleware test services ─────────────────────────
+
+# Outbound middleware: injects x-custom-tag into every outgoing call/send.
+class TestOutboundMiddleware
+  def call(_service, _handler, headers)
+    headers['x-custom-tag'] = 'injected-by-outbound'
+    yield
+  end
+end
+
+# Target service: reads x-custom-tag from inbound headers (set by outbound middleware on the caller side).
+class OutboundTargetService < Restate::Service
+  handler def read_tag
+    tag = Restate.request.headers['x-custom-tag'] || 'missing'
+    "tag:#{tag}"
+  end
+end
+
+# Caller service: calls OutboundTargetService. The outbound middleware should inject the header.
+class OutboundCallerService < Restate::Service
+  handler def call_target
+    OutboundTargetService.call.read_tag.await
+  end
+end
+
 # ── Declarative state test services ───────────────────────────
 
 class TestDeclCounter < Restate::VirtualObject
@@ -165,9 +190,11 @@ RSpec.describe Restate::Testing do
     @harness = Restate::Testing::RestateTestHarness.new(
       TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TestFiberLocalCtx,
       TypedGreeter, MiddlewareTestService,
-      TestDeclCounter, TestFluentWorker, TestFluentOrchestrator
+      TestDeclCounter, TestFluentWorker, TestFluentOrchestrator,
+      OutboundTargetService, OutboundCallerService
     ) do |endpoint|
       endpoint.use(TestHeaderMiddleware)
+      endpoint.use_outbound(TestOutboundMiddleware)
     end
     @harness.start
   end
@@ -298,6 +325,14 @@ RSpec.describe Restate::Testing do
                          { "key" => key, "value" => 7 })
     expect(response.code).to eq("200")
     expect(JSON.parse(response.body)).to eq("counter:7")
+  end
+
+  # ── Outbound middleware ──
+
+  it "injects headers via outbound middleware on service-to-service calls" do
+    response = post_json(@harness.ingress_url, "/OutboundCallerService/call_target", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq("tag:injected-by-outbound")
   end
 
   # ── HTTP Client ──

@@ -138,13 +138,19 @@ module Restate
     attr_reader identity_keys: Array[String]
     attr_accessor protocol: String?
     attr_reader middleware: Array[untyped]
+    attr_reader outbound_middleware: Array[untyped]
     def initialize: () -> void
     def bind: (*untyped svcs) -> self
     def streaming_protocol: () -> self
     def request_response_protocol: () -> self
     def identity_key: (String key) -> self
     def use: (untyped klass, *untyped args, **untyped kwargs) -> self
+    def use_outbound: (untyped klass, *untyped args, **untyped kwargs) -> self
     def app: () -> untyped
+
+    private
+
+    def instantiate_middleware: (untyped klass, Array[untyped] args, Hash[Symbol, untyped] kwargs) -> untyped
   end
 
   # ── Service proxies ──

@@ -193,7 +193,8 @@ module Restate
         invocation: invocation,
         send_output: send_output,
         input_queue: input_queue,
-        middleware: @endpoint.middleware
+        middleware: @endpoint.middleware,
+        outbound_middleware: @endpoint.outbound_middleware
       )
 
       # Spawn the handler as an async task so the response body can stream

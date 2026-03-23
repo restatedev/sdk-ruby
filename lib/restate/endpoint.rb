@@ -4,7 +4,7 @@
 module Restate
   # Container for registered services. Bind services here, then create the Rack app.
   class Endpoint
-    attr_reader :services, :identity_keys, :middleware
+    attr_reader :services, :identity_keys, :middleware, :outbound_middleware
 
     attr_accessor :protocol
 
@@ -13,6 +13,7 @@ module Restate
       @protocol = nil
       @identity_keys = []
       @middleware = []
+      @outbound_middleware = []
     end
 
     # Bind one or more services to this endpoint.
@@ -48,29 +49,25 @@ module Restate
       self
     end
 
-    # Add handler-level middleware.
+    # Add inbound (server) middleware.
     #
-    # Middleware wraps every handler invocation with access to the handler metadata
-    # and context. Use it for tracing, metrics, logging, error reporting, etc.
+    # Inbound middleware wraps every handler invocation, like
+    # {https://github.com/sidekiq/sidekiq/wiki/Middleware Sidekiq server middleware}.
     #
     # A middleware is a class whose instances respond to +call(handler, ctx)+.
     # Use +yield+ inside +call+ to invoke the next middleware or the handler.
     # The return value of +yield+ is the handler's return value.
     #
-    # This follows the same pattern as {https://github.com/sidekiq/sidekiq/wiki/Middleware Sidekiq middleware}.
-    #
     # @example OpenTelemetry tracing
-    #   class OpenTelemetryMiddleware
+    #   class TracingMiddleware
     #     def call(handler, ctx)
-    #       tracer.in_span(handler.name, attributes: {
-    #         'restate.service' => handler.service_tag.name,
-    #         'restate.invocation_id' => ctx.request.id
-    #       }) do
-    #         yield
+    #       extracted = OpenTelemetry.propagation.extract(ctx.request.headers)
+    #       OpenTelemetry::Context.with_current(extracted) do
+    #         tracer.in_span(handler.name) { yield }
     #       end
     #     end
     #   end
-    #   endpoint.use(OpenTelemetryMiddleware)
+    #   endpoint.use(TracingMiddleware)
     #
     # @example Metrics
     #   class MetricsMiddleware
@@ -84,30 +81,53 @@ module Restate
     #   end
     #   endpoint.use(MetricsMiddleware)
     #
-    # @example Middleware with configuration
-    #   class AuthMiddleware
-    #     def initialize(api_key:)
-    #       @api_key = api_key
-    #     end
-    #
-    #     def call(handler, ctx)
-    #       raise Restate::TerminalError.new('unauthorized', status_code: 401) unless valid?(ctx)
-    #       yield
-    #     end
-    #   end
-    #   endpoint.use(AuthMiddleware, api_key: 'secret')
-    #
     # @param klass [Class] middleware class (will be instantiated by the SDK)
     # @param args [Array] positional arguments for the middleware constructor
     # @param kwargs [Hash] keyword arguments for the middleware constructor
     # @return [self]
     def use(klass, *args, **kwargs)
-      instance = if kwargs.empty?
-                   klass.new(*args)
-                 else
-                   klass.new(*args, **kwargs)
-                 end
-      @middleware << instance
+      @middleware << instantiate_middleware(klass, args, kwargs)
+      self
+    end
+
+    # Add outbound (client) middleware.
+    #
+    # Outbound middleware wraps every outgoing service call and send, like
+    # {https://github.com/sidekiq/sidekiq/wiki/Middleware Sidekiq client middleware}.
+    #
+    # A middleware is a class whose instances respond to +call(service, handler, headers)+.
+    # The +headers+ hash is mutable — modify it to attach headers to the outgoing
+    # request. Use +yield+ to continue the chain.
+    #
+    # Note: Restate automatically propagates inbound headers to outbound calls.
+    # Outbound middleware is for injecting *new* headers that aren't on the
+    # original request (e.g., tenant IDs from fiber-local storage, authorization
+    # tokens for specific target services).
+    #
+    # @example Propagate tenant ID to all outgoing calls
+    #   class TenantOutboundMiddleware
+    #     def call(_service, _handler, headers)
+    #       headers['x-tenant-id'] = Thread.current[:tenant_id]
+    #       yield
+    #     end
+    #   end
+    #   endpoint.use_outbound(TenantOutboundMiddleware)
+    #
+    # @example Log all outgoing calls
+    #   class OutboundLogger
+    #     def call(service, handler, headers)
+    #       logger.info("Calling #{service}/#{handler}")
+    #       yield
+    #     end
+    #   end
+    #   endpoint.use_outbound(OutboundLogger)
+    #
+    # @param klass [Class] middleware class (will be instantiated by the SDK)
+    # @param args [Array] positional arguments for the middleware constructor
+    # @param kwargs [Hash] keyword arguments for the middleware constructor
+    # @return [self]
+    def use_outbound(klass, *args, **kwargs)
+      @outbound_middleware << instantiate_middleware(klass, args, kwargs)
       self
     end
 
@@ -115,6 +135,16 @@ module Restate
     def app
       require_relative 'server'
       Server.new(self)
+    end
+
+    private
+
+    def instantiate_middleware(klass, args, kwargs)
+      if kwargs.empty?
+        klass.new(*args)
+      else
+        klass.new(*args, **kwargs)
+      end
     end
   end
 end

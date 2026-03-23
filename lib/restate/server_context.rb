@@ -23,7 +23,8 @@ module Restate
 
     attr_reader :vm, :invocation
 
-    def initialize(vm:, handler:, invocation:, send_output:, input_queue:, middleware: [])
+    def initialize(vm:, handler:, invocation:, send_output:, input_queue:, middleware: [],
+                   outbound_middleware: [])
       @vm = vm
       @handler = handler
       @invocation = invocation
@@ -32,6 +33,7 @@ module Restate
       @run_coros_to_execute = {}
       @attempt_finished_event = AttemptFinishedEvent.new
       @middleware = middleware
+      @outbound_middleware = outbound_middleware
     end
 
     # ── Main entry point ──
@@ -204,12 +206,14 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
       parameter = in_serde.serialize(arg)
-      call_handle = @vm.sys_call(
-        service: svc_name, handler: handler_name, parameter: parameter,
-        key: key, idempotency_key: idempotency_key, headers: headers
-      )
-      DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
-                            output_serde: out_serde)
+      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+        call_handle = @vm.sys_call(
+          service: svc_name, handler: handler_name, parameter: parameter,
+          key: key, idempotency_key: idempotency_key, headers: hdrs
+        )
+        DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
+                              output_serde: out_serde)
+      end
     end
 
     # Sends a one-way invocation to a Restate service handler (fire-and-forget).
@@ -219,11 +223,13 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      invocation_id_handle = @vm.sys_send(
-        service: svc_name, handler: handler_name, parameter: parameter,
-        key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
-      )
-      SendHandle.new(self, invocation_id_handle)
+      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+        invocation_id_handle = @vm.sys_send(
+          service: svc_name, handler: handler_name, parameter: parameter,
+          key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
+        )
+        SendHandle.new(self, invocation_id_handle)
+      end
     end
 
     # Durably calls a handler on a Restate virtual object, keyed by +key+.
@@ -233,12 +239,14 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
       parameter = in_serde.serialize(arg)
-      call_handle = @vm.sys_call(
-        service: svc_name, handler: handler_name, parameter: parameter,
-        key: key, idempotency_key: idempotency_key, headers: headers
-      )
-      DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
-                            output_serde: out_serde)
+      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+        call_handle = @vm.sys_call(
+          service: svc_name, handler: handler_name, parameter: parameter,
+          key: key, idempotency_key: idempotency_key, headers: hdrs
+        )
+        DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
+                              output_serde: out_serde)
+      end
     end
 
     # Sends a one-way invocation to a Restate virtual object handler (fire-and-forget).
@@ -248,11 +256,13 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      invocation_id_handle = @vm.sys_send(
-        service: svc_name, handler: handler_name, parameter: parameter,
-        key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
-      )
-      SendHandle.new(self, invocation_id_handle)
+      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+        invocation_id_handle = @vm.sys_send(
+          service: svc_name, handler: handler_name, parameter: parameter,
+          key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
+        )
+        SendHandle.new(self, invocation_id_handle)
+      end
     end
 
     # Durably calls a handler on a Restate workflow, keyed by +key+.
@@ -332,22 +342,26 @@ module Restate
 
     # Durably calls a handler using raw bytes (no serialization). Useful for proxying.
     def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
-      call_handle = @vm.sys_call(
-        service: service, handler: handler, parameter: arg,
-        key: key, idempotency_key: idempotency_key, headers: headers
-      )
-      DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
-                            output_serde: nil)
+      with_outbound_middleware(service, handler, headers) do |hdrs|
+        call_handle = @vm.sys_call(
+          service: service, handler: handler, parameter: arg,
+          key: key, idempotency_key: idempotency_key, headers: hdrs
+        )
+        DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
+                              output_serde: nil)
+      end
     end
 
     # Sends a one-way invocation using raw bytes (no serialization). Useful for proxying.
     def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      invocation_id_handle = @vm.sys_send(
-        service: service, handler: handler, parameter: arg,
-        key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: headers
-      )
-      SendHandle.new(self, invocation_id_handle)
+      with_outbound_middleware(service, handler, headers) do |hdrs|
+        invocation_id_handle = @vm.sys_send(
+          service: service, handler: handler, parameter: arg,
+          key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
+        )
+        SendHandle.new(self, invocation_id_handle)
+      end
     end
 
     # ── Request metadata ──
@@ -450,6 +464,25 @@ module Restate
         break if output.nil? || output.empty?
 
         @send_output.call(output)
+      end
+    end
+
+    # ── Outbound middleware ──
+
+    # Runs outbound middleware chain (Sidekiq client middleware pattern).
+    # Each middleware gets +call(service, handler, headers)+ and must +yield+
+    # to continue the chain. The block at the end performs the actual VM call.
+    def with_outbound_middleware(service, handler, headers, &action)
+      if @outbound_middleware.empty?
+        action.call(headers)
+      else
+        h = headers || {}
+        chain = ->(hdrs) { action.call(hdrs) }
+        @outbound_middleware.reverse_each do |mw|
+          prev = chain
+          chain = ->(hdrs) { mw.call(service, handler, hdrs) { prev.call(hdrs) } }
+        end
+        chain.call(h)
       end
     end
 
