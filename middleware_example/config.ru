@@ -4,7 +4,8 @@
 # Middleware Example
 #
 # Demonstrates real OpenTelemetry tracing and tenant isolation middleware
-# on a Restate service. Spans are exported to the console.
+# on a Restate service, including outbound middleware that propagates
+# tenant context across service-to-service calls.
 #
 # Run:
 #   bundle install
@@ -33,8 +34,13 @@ OpenTelemetry::SDK.configure do |c|
 end
 
 # Wire everything together
-endpoint = Restate.endpoint(PaymentService)
+endpoint = Restate.endpoint(PaymentService, ReceiptService)
+
+# Inbound middleware (wraps handler execution)
 endpoint.use(OpenTelemetryMiddleware)
 endpoint.use(TenantMiddleware)
+
+# Outbound middleware (wraps outgoing service calls/sends)
+endpoint.use_outbound(TenantOutboundMiddleware)
 
 run endpoint.app

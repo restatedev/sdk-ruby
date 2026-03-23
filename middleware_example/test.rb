@@ -31,10 +31,11 @@ OpenTelemetry::SDK.configure do |c|
   )
 end
 
-# Start the harness with middleware
-harness = Restate::Testing::RestateTestHarness.new(PaymentService) do |endpoint|
+# Start the harness with inbound + outbound middleware
+harness = Restate::Testing::RestateTestHarness.new(PaymentService, ReceiptService) do |endpoint|
   endpoint.use(OpenTelemetryMiddleware)
   endpoint.use(TenantMiddleware)
+  endpoint.use_outbound(TenantOutboundMiddleware)
 end
 
 harness.start
@@ -71,6 +72,19 @@ print 'Test 2: missing tenant header... '
 resp = post(harness.ingress_url, '/PaymentService/charge', '10.00')
 body = JSON.parse(resp.body)
 if resp.code == '200' && body.include?('unknown')
+  puts "PASS (#{body})"
+  passed += 1
+else
+  puts "FAIL (status=#{resp.code} body=#{body})"
+  failed += 1
+end
+
+# Test 3: Outbound middleware propagates tenant to ReceiptService
+print 'Test 3: outbound tenant propagation to ReceiptService... '
+resp = post(harness.ingress_url, '/PaymentService/charge', '99.99',
+            headers: { 'x-tenant-id' => 'globex' })
+body = JSON.parse(resp.body)
+if resp.code == '200' && body.include?('receipt') && body.include?('globex')
   puts "PASS (#{body})"
   passed += 1
 else

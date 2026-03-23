@@ -1,15 +1,15 @@
 # Middleware Example
 
-Shows how to use Restate handler middleware with real [OpenTelemetry](https://opentelemetry.io/) tracing and tenant isolation.
+Shows how to use Restate handler middleware with real [OpenTelemetry](https://opentelemetry.io/) tracing and tenant isolation — including outbound middleware that propagates context across service-to-service calls.
 
 ## What's inside
 
 | File | Description |
 |------|-------------|
-| `config.ru` | Wiring — configures OTel, creates endpoint, registers middleware |
-| `payment_service.rb` | A Restate service that reads tenant from middleware-set context |
-| `opentelemetry_middleware.rb` | Creates OTel spans with Restate metadata, extracts W3C TraceContext |
-| `tenant_middleware.rb` | Extracts `x-tenant-id` header into fiber-local storage |
+| `config.ru` | Wiring — configures OTel, creates endpoint, registers inbound + outbound middleware |
+| `payment_service.rb` | PaymentService charges and calls ReceiptService; ReceiptService reads tenant from headers |
+| `opentelemetry_middleware.rb` | Inbound: creates OTel spans with Restate metadata, extracts W3C TraceContext |
+| `tenant_middleware.rb` | Inbound: extracts `x-tenant-id` into fiber-local storage. Outbound: injects it into outgoing calls |
 
 ## Running
 
@@ -35,7 +35,9 @@ curl localhost:8080/PaymentService/charge \
 
 ## How middleware works
 
-Middleware follows the [Sidekiq middleware](https://github.com/sidekiq/sidekiq/wiki/Middleware) pattern — a class with a `call` method that uses `yield`:
+### Inbound (server) middleware
+
+Inbound middleware wraps handler execution, following the [Sidekiq server middleware](https://github.com/sidekiq/sidekiq/wiki/Middleware) pattern:
 
 ```ruby
 class MyMiddleware
@@ -47,8 +49,22 @@ class MyMiddleware
   end
 end
 
-endpoint = Restate.endpoint(MyService)
 endpoint.use(MyMiddleware)
 ```
 
-Middleware executes in registration order. Each middleware wraps the next, forming an onion around the handler.
+### Outbound (client) middleware
+
+Outbound middleware wraps every outgoing service call/send, following the [Sidekiq client middleware](https://github.com/sidekiq/sidekiq/wiki/Middleware) pattern:
+
+```ruby
+class MyOutboundMiddleware
+  def call(service, handler, headers)
+    headers['x-custom'] = 'value'
+    yield
+  end
+end
+
+endpoint.use_outbound(MyOutboundMiddleware)
+```
+
+Middleware executes in registration order. Each middleware wraps the next, forming an onion around the handler (inbound) or the outgoing call (outbound).
