@@ -49,6 +49,7 @@ RUN chmod +x entrypoint.sh
 EXPOSE 9080
 ENV RESTATE_CORE_LOG=debug
 ENV RUST_BACKTRACE=1
+ENV RUBYOPT=--yjit
 ENV PORT=9080
 
 ENTRYPOINT ["./entrypoint.sh"]
