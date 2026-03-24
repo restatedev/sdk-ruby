@@ -100,7 +100,8 @@ class UserSignup < Restate::Workflow
     user_id = Restate.run_sync('create-account') { create_user(email) }
     Restate.set('status', 'waiting_for_approval')
 
-    # Block until approve() is called
+    # Block until approve() is called — Restate.promise suspends the handler
+    # and returns the resolved value when another handler calls resolve_promise.
     approval = Restate.promise('approval')
     Restate.set('status', 'active')
     { 'user_id' => user_id, 'approval' => approval }
@@ -144,6 +145,11 @@ retries, completed operations are replayed from the journal without re-executing
 Execute a side effect exactly once. The result is durably recorded — on retry, the block is
 skipped and the stored result is returned.
 
+> **Important:** `run` blocks are for external/non-deterministic work (HTTP calls, database writes,
+> random values, timestamps). **Do not call `Restate.*` APIs inside a `run` block** — no
+> `Restate.get`, `Restate.set`, `Restate.sleep`, `Restate.service_call`, etc. Those operations
+> must happen in the handler body, outside of `run`.
+
 `run` returns a `DurableFuture`; call `.await` to get the result. Use `run_sync` to get
 the value directly:
 
@@ -159,12 +165,14 @@ result = Restate.run_sync('step-name') { do_something() }
 **With retry policy:**
 ```ruby
 policy = Restate::RunRetryPolicy.new(
-  initial_interval: 100,     # ms between retries
+  initial_interval: 100,     # milliseconds between retries
   max_attempts: 5,           # max retry count
   interval_factor: 2.0,      # exponential backoff multiplier
-  max_interval: 10_000,      # ms cap on retry interval
-  max_duration: 60_000       # ms total duration cap
+  max_interval: 10_000,      # milliseconds cap on retry interval
+  max_duration: 60_000       # milliseconds total duration cap
 )
+# NOTE: RunRetryPolicy uses milliseconds. Service/handler-level timeouts
+# (inactivity_timeout, abort_timeout, etc.) use seconds. See "Sharp Edges" below.
 
 result = Restate.run_sync('flaky-call', retry_policy: policy) { call_external_api() }
 ```
@@ -175,8 +183,6 @@ Restate.run_sync('validate') do
   raise Restate::TerminalError.new('invalid input', status_code: 400)
 end
 ```
-
-**Background thread** (`background: true`):
 
 **Background thread pool** (`background: true`):
 
@@ -472,6 +478,11 @@ class MyService < Restate::Service
 end
 ```
 
+> **Handler lifecycle:** The SDK allocates a **single instance** of each service class and reuses
+> it across all invocations. Do not store per-request state in instance variables — they will
+> leak across invocations. Use `Restate.get`/`Restate.set` (or declarative `state`) for durable
+> state, and `Thread.current` (fiber-local) for per-invocation transient context.
+
 ### Handler Options
 
 ```ruby
@@ -682,9 +693,17 @@ Outbound middleware wraps every outgoing service call and send, following the
 with `use_outbound`:
 
 ```ruby
+# A Current-style accessor for per-invocation context (fiber-scoped in Ruby 3.0+)
+module Current
+  module_function
+
+  def tenant_id = Thread.current[:tenant_id]
+  def tenant_id=(val) = Thread.current[:tenant_id] = val
+end
+
 class TenantOutboundMiddleware
   def call(_service, _handler, headers)
-    headers['x-tenant-id'] = Thread.current[:tenant_id]
+    headers['x-tenant-id'] = Current.tenant_id if Current.tenant_id
     yield
   end
 end
@@ -710,9 +729,16 @@ OpenTelemetry tracing and tenant isolation.
 
 ## Typed Handlers
 
-The `input:` and `output:` options on handler declarations let you use typed structs for
-handler I/O. The SDK automatically deserializes input JSON into struct instances and generates
-JSON Schema for Restate's discovery protocol.
+The `input:` and `output:` options on handler declarations control **serialization and JSON Schema
+generation** — they do not add runtime type validation on their own.
+
+- **`Dry::Struct`** gets full object instantiation: input JSON is deserialized into a struct instance
+  with attribute validation, and JSON Schema is generated from the struct definition.
+- **Primitive types** (`String`, `Integer`, etc.) select the JSON serde and generate the
+  corresponding JSON Schema (`{type: 'string'}`, etc.), but the value is still whatever
+  `JSON.parse` returns — there is no runtime check that it matches the declared type.
+- **Custom classes** are used as-is if they respond to `serialize`/`deserialize` (a serde),
+  or if they respond to `.json_schema` (schema-only). Otherwise they fall back to `JsonSerde`.
 
 ### Using Dry::Struct
 
@@ -759,11 +785,11 @@ Supported dry-types mappings:
 
 ### How It Works
 
-`Dry::Struct` types are auto-detected at runtime — no configuration needed. When a handler
-declares `input: MyRequest`:
-- Input JSON is deserialized into a struct instance (not a raw Hash)
+`Dry::Struct` types are auto-detected at handler registration time. When a handler declares
+`input: MyRequest` where `MyRequest < Dry::Struct`:
+- Input JSON is deserialized into a struct instance (not a raw Hash) — this **is** runtime typing
 - JSON Schema is generated from the struct definition and published via Restate discovery
-- Output is serialized based on the `output:` type
+- Output is serialized via `to_h` + JSON
 
 ### Primitive Types
 
@@ -775,7 +801,8 @@ handler :compute, input: Integer, output: Integer
 ```
 
 These generate the corresponding JSON Schema (`{type: 'string'}`, `{type: 'integer'}`, etc.)
-and use standard JSON serialization.
+and use standard JSON serialization. Note: this does **not** validate at runtime that the input
+is actually a `String` or `Integer` — it only controls schema metadata and serde selection.
 
 ### Serde Resolution Order
 
@@ -888,7 +915,7 @@ The SDK ships an HTTP client for invoking Restate services from **outside** the 
 ```ruby
 require 'restate'
 
-client = Restate::Client.new("http://localhost:8080")
+client = Restate::Client.new(ingress_url: "http://localhost:8080")
 
 # Stateless service
 result = client.service(Greeter).greet("World")
@@ -905,9 +932,10 @@ result = client.workflow(UserSignup, "user42").run("user@example.com")
 **With custom headers** (e.g., authentication):
 
 ```ruby
-client = Restate::Client.new("http://localhost:8080", headers: {
-  "Authorization" => "Bearer token123"
-})
+client = Restate::Client.new(
+  ingress_url: "http://localhost:8080",
+  ingress_headers: { "Authorization" => "Bearer token123" }
+)
 ```
 
 **Note:** The client is for external invocation only. Inside a handler, use the fluent call API
@@ -1077,6 +1105,47 @@ restate deployments register http://localhost:9080
 
 ---
 
+## Sharp Edges / Non-Obvious Rules
+
+### `run` blocks are not general handler code
+
+`Restate.run` blocks are for external, non-deterministic work (HTTP calls, database writes,
+`Time.now`, `rand`). **Do not call any `Restate.*` API inside a `run` block.** State reads,
+sleeps, service calls, awakeables — all of these must happen in the handler body, outside `run`.
+
+### Instance variables leak across invocations
+
+The SDK allocates a single instance of each service class. Instance variables persist across
+invocations. Use `Restate.get`/`Restate.set` for durable state, and `Thread.current` (fiber-local
+in Ruby 3.0+) for per-invocation transient context. Never store request-specific data in `@ivars`.
+
+### `Restate.promise` blocks
+
+`Restate.promise('name')` **suspends the handler** until another handler calls
+`Restate.resolve_promise('name', value)`. It returns the resolved value, not a future.
+This is intentional — promises are a coordination primitive for workflows.
+
+### Duration units differ
+
+`RunRetryPolicy` intervals are in **milliseconds**:
+```ruby
+RunRetryPolicy.new(initial_interval: 100, max_interval: 10_000)  # ms
+```
+
+Service/handler-level timeouts and retention are in **seconds**:
+```ruby
+inactivity_timeout 300     # seconds
+journal_retention 86_400   # seconds
+```
+
+### `input:` / `output:` is schema + serde, not runtime validation
+
+Declaring `handler :greet, input: String` generates JSON Schema metadata and selects the JSON
+serde. It does **not** validate at runtime that the parsed value is a `String`. Only `Dry::Struct`
+provides real runtime typing (attribute validation on instantiation).
+
+---
+
 ## Complete API Quick Reference
 
 ### Service Types
@@ -1198,7 +1267,7 @@ endpoint.use_outbound(MyOutbound)     # Outbound (client) middleware
 ### HTTP Client (External Invocation)
 
 ```ruby
-client = Restate::Client.new("http://localhost:8080")
+client = Restate::Client.new(ingress_url: "http://localhost:8080")
 client.service(Greeter).greet("World")
 client.object(Counter, "key").add(5)
 client.workflow(UserSignup, "key").run(email)
