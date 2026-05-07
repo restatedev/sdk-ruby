@@ -81,6 +81,33 @@ module Restate
       post_admin("/restate/invocations/#{invocation_id}/kill", nil)
     end
 
+    # ── Introspection queries ──
+
+    # Execute a SQL query against Restate's introspection API (DataFusion).
+    # The admin API exposes system tables (sys_invocation, sys_journal, state,
+    # etc.) that can be queried with standard SQL.
+    #
+    # @param sql [String] a SQL query string
+    # @return [Array<Hash>] rows returned by the query
+    #
+    # @example
+    #   client.execute_query("SELECT id, status FROM sys_invocation LIMIT 10")
+    def execute_query(sql)
+      uri = URI("#{@admin_url}/query")
+      request = Net::HTTP::Post.new(uri)
+      request['Content-Type'] = 'application/json'
+      request['Accept'] = 'application/json'
+      @admin_headers.each { |k, v| request[k] = v }
+      request.body = JSON.generate({ query: sql })
+      response = Net::HTTP.start(uri.hostname, uri.port, # steep:ignore ArgumentTypeMismatch
+                                 use_ssl: uri.scheme == 'https',
+                                 open_timeout: 5,
+                                 read_timeout: 30) { |http| http.request(request) }
+      Kernel.raise "Restate query error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
+      body = response.body
+      body && !body.empty? ? (JSON.parse(body)["rows"] || []) : []
+    end
+
     private
 
     def resolve_name(service)
