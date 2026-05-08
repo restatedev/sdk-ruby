@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-require "active_record"
+require 'active_record'
 
 module Restate
   # Arel table references for Restate's SQL introspection tables.
@@ -65,9 +65,9 @@ module Restate
     def quote(value)
       case value
       when String then "'#{value.gsub("'", "''")}'"
-      when nil then "NULL"
-      when true then "TRUE"
-      when false then "FALSE"
+      when nil then 'NULL'
+      when true then 'TRUE'
+      when false then 'FALSE'
       else value.to_s
       end
     end

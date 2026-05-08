@@ -92,7 +92,7 @@ module Restate
     #
     # @example
     #   client.execute_query("SELECT id, status FROM sys_invocation LIMIT 10")
-    def execute_query(sql)
+    def execute_query(sql) # rubocop:disable Metrics/AbcSize,Metrics/MethodLength
       uri = URI("#{@admin_url}/query")
       request = Net::HTTP::Post.new(uri)
       request['Content-Type'] = 'application/json'
@@ -105,7 +105,7 @@ module Restate
                                  read_timeout: 30) { |http| http.request(request) }
       Kernel.raise "Restate query error: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
       body = response.body
-      body && !body.empty? ? (JSON.parse(body)["rows"] || []) : []
+      body && !body.empty? ? (JSON.parse(body)['rows'] || []) : []
     end
 
     private

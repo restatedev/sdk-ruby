@@ -22,9 +22,9 @@
 # If you have the full SDK loaded (native extension compiled), you can
 # simply `require "restate"`. Otherwise, load just the client layer:
 
-require "restate/config"
-require "restate/client"
-require "restate/introspection"
+require 'restate/config'
+require 'restate/client'
+require 'restate/introspection'
 
 module Restate
   class << self
@@ -40,7 +40,7 @@ module Restate
   end
 end
 
-Restate.config.admin_url = ENV.fetch("RESTATE_ADMIN", "http://localhost:9070")
+Restate.config.admin_url = ENV.fetch('RESTATE_ADMIN', 'http://localhost:9070')
 
 # Helper to print SQL without requiring an AR connection
 def show_sql(query)
@@ -53,7 +53,7 @@ j = Restate::Sys::Journal
 s = Restate::Sys::State
 
 # ── Example 1: List recent invocations ──
-puts "=== Recent invocations ==="
+puts '=== Recent invocations ==='
 
 query = i.project(i[:id], i[:target_service_name], i[:target_handler_name], i[:status], i[:created_at])
          .order(i[:created_at].desc)
@@ -69,8 +69,8 @@ end
 puts "\n=== Running invocations for 'Greeter' ==="
 
 query = i.project(i[:id], i[:target_handler_name], i[:retry_count], i[:created_at])
-         .where(i[:target_service_name].eq("Greeter"))
-         .where(i[:status].eq("running"))
+         .where(i[:target_service_name].eq('Greeter'))
+         .where(i[:status].eq('running'))
          .order(i[:created_at].desc)
          .take(20)
 
@@ -86,7 +86,7 @@ puts "\n=== Invocations with their input journal entry ==="
 query = i.project(i[:id], i[:target], i[:status], j[:entry_json])
          .join(j, Arel::Nodes::OuterJoin)
          .on(j[:id].eq(i[:id]).and(j[:index].eq(0)))
-         .where(i[:target_service_name].eq("Greeter"))
+         .where(i[:target_service_name].eq('Greeter'))
          .order(i[:created_at].desc)
          .take(5)
 
@@ -101,7 +101,7 @@ end
 puts "\n=== Virtual object state ==="
 
 query = s.project(s[:service_name], s[:service_key], s[:key], s[:value_utf8])
-         .where(s[:service_name].eq("Counter"))
+         .where(s[:service_name].eq('Counter'))
          .take(20)
 
 show_sql(query)
@@ -114,9 +114,9 @@ end
 puts "\n=== Composable queries ==="
 
 # Build a base query and refine it conditionally
-service_name = ENV["SERVICE"]
-handler_name = ENV["HANDLER"]
-status_filter = ENV["STATUS"]
+service_name = ENV.fetch('SERVICE', nil)
+handler_name = ENV.fetch('HANDLER', nil)
+status_filter = ENV.fetch('STATUS', nil)
 
 query = i.project(i[:id], i[:target], i[:status], i[:created_at])
 query = query.where(i[:target_service_name].eq(service_name)) if service_name

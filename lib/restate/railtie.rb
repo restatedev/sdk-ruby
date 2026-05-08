@@ -10,8 +10,8 @@ module Restate
   # for building type-safe, composable queries against system tables like
   # +sys_invocation+, +sys_journal+, and +state+.
   class Railtie < Rails::Railtie
-    initializer "restate.introspection" do
-      require_relative "introspection"
+    initializer 'restate.introspection' do
+      require_relative 'introspection'
     end
   end
 end
