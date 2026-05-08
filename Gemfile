@@ -22,4 +22,7 @@ group :development, :test do
   # For middleware_example/
   gem 'opentelemetry-api', require: false
   gem 'opentelemetry-sdk', require: false
+
+  # For introspection (Arel query support) tests
+  gem 'activerecord', require: false
 end

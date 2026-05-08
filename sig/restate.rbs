@@ -8,6 +8,8 @@ module Restate
   def self.configure: () { (Config) -> void } -> void
   def self.config: () -> Config
   def self.client: () -> Client
+  def self.query: (untyped arel_or_sql) -> Array[Hash[String, untyped]]
+  def self.arel_to_sql: (untyped arel) -> String
 
   # ── Durable execution ──
 
@@ -118,6 +120,7 @@ module Restate
     def reject_awakeable: (String awakeable_id, String message, ?code: Integer) -> void
     def cancel_invocation: (String invocation_id) -> void
     def kill_invocation: (String invocation_id) -> void
+    def execute_query: (String sql) -> Array[Hash[String, untyped]]
 
     private
 

@@ -18,6 +18,7 @@ require_relative 'restate/endpoint'
 require_relative 'restate/service_proxy'
 require_relative 'restate/config'
 require_relative 'restate/client'
+require_relative 'restate/railtie' if defined?(Rails::Railtie)
 
 # Restate Ruby SDK — build resilient applications with durable execution.
 #
