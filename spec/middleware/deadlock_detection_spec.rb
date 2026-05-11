@@ -307,4 +307,57 @@ RSpec.describe DD do
       expect(decoded).to include(%w[ServiceB key2])
     end
   end
+
+  describe 'end-to-end: exclusive handler calls shared handler on same VO key' do
+    let(:exclusive_handler) do
+      make_handler(service_kind: 'object', service_name: 'Account',
+                   handler_name: 'transfer', handler_kind: 'exclusive')
+    end
+
+    let(:shared_handler) do
+      make_handler(service_kind: 'object', service_name: 'Account',
+                   handler_name: 'balance_info', handler_kind: 'shared')
+    end
+
+    it 'allows the full chain without raising' do
+      outer_ctx = make_ctx(headers: {}, key: 'alice')
+
+      result = inbound.call(exclusive_handler, outer_ctx) do
+        expect(DD.held_locks).to include(%w[Account alice])
+
+        Thread.current[:restate_outbound_handler_meta] = shared_handler
+        outbound_headers = {}
+        outbound.call('Account', 'balance_info', outbound_headers) do
+          decoded = DD.decode_header(outbound_headers[DD::HEADER])
+          expect(decoded).to include(%w[Account alice])
+
+          inner_ctx = make_ctx(
+            headers: { DD::HEADER => outbound_headers[DD::HEADER] },
+            key: 'alice'
+          )
+          inbound.call(shared_handler, inner_ctx) do
+            :shared_handler_ok
+          end
+        end
+      end
+
+      expect(result).to eq(:shared_handler_ok)
+    end
+
+    it 'deadlocks if the inner call targets an exclusive handler instead' do
+      outer_ctx = make_ctx(headers: {}, key: 'alice')
+
+      expect do
+        inbound.call(exclusive_handler, outer_ctx) do
+          Thread.current[:restate_outbound_handler_meta] = exclusive_handler
+          outbound_headers = {}
+
+          outbound.call('Account', 'transfer', outbound_headers) { :unreachable }
+        end
+      end.to raise_error(DD::DeadlockError) { |e|
+        expect(e.message).to include('Deadlock detected')
+        expect(e.message).to include('Account')
+      }
+    end
+  end
 end
