@@ -83,7 +83,7 @@ class Account < Restate::VirtualObject
     { balance: balance }
   end
 
-  shared def get_balance
+  shared def balance_info
     { balance: balance }
   end
 end

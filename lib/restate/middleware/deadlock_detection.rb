@@ -93,27 +93,8 @@ module Restate
         # @raise [DeadlockError] If the call would deadlock
         def call(handler, ctx)
           previous = DeadlockDetection.held_locks
-
           incoming = parse_locks(ctx)
-          is_vo = handler.service_tag.kind == 'object'
-          is_exclusive = handler.kind == 'exclusive'
-          key = ctx.respond_to?(:key) ? ctx.key : nil
-
-          if is_vo && is_exclusive && key
-            svc = handler.service_tag.name
-            lock_id = "#{svc}:#{key}"
-
-            if incoming.include?(lock_id)
-              Kernel.raise DeadlockError,
-                "Deadlock detected: #{svc}##{handler.name} on key '#{key}' " \
-                "called while an exclusive handler holds the same VO key. " \
-                "Held locks: #{incoming.to_a.join(', ')}. " \
-                "This call will never complete."
-            end
-
-            incoming << lock_id
-          end
-
+          check_and_track_lock!(handler, ctx, incoming)
           DeadlockDetection.held_locks = incoming
           yield
         ensure
@@ -121,6 +102,27 @@ module Restate
         end
 
         private
+
+        def check_and_track_lock!(handler, ctx, incoming)
+          return unless handler.service_tag.kind == 'object'
+          return unless handler.kind == 'exclusive'
+
+          key = ctx.respond_to?(:key) ? ctx.key : nil
+          return unless key
+
+          svc = handler.service_tag.name
+          lock_id = "#{svc}:#{key}"
+          raise_deadlock!(svc, handler.name, key, incoming) if incoming.include?(lock_id)
+          incoming << lock_id
+        end
+
+        def raise_deadlock!(svc, handler_name, key, locks)
+          msg = "Deadlock detected: #{svc}##{handler_name} on key '#{key}' " \
+                'called while an exclusive handler holds the same VO key. ' \
+                "Held locks: #{locks.to_a.join(', ')}. " \
+                'This call will never complete.'
+          Kernel.raise DeadlockError, msg
+        end
 
         def parse_locks(ctx)
           headers = ctx.request.headers
@@ -150,20 +152,23 @@ module Restate
         # @raise [DeadlockError] If the call would deadlock
         def call(service, handler, headers)
           locks = DeadlockDetection.held_locks
-          if locks.any?
-            headers[HEADER] = locks.to_a.join(SEPARATOR)
-
-            prefix = "#{service}:"
-            held_lock = locks.find { |l| l.start_with?(prefix) }
-            if held_lock
-              Kernel.raise DeadlockError,
-                "Deadlock detected: outbound call to #{service}##{handler} " \
-                "while exclusive lock held on #{held_lock}. " \
-                "This call will block forever."
-            end
-          end
-
+          propagate_and_check!(service, handler, headers, locks) if locks.any?
           yield
+        end
+
+        private
+
+        def propagate_and_check!(service, handler, headers, locks)
+          headers[HEADER] = locks.to_a.join(SEPARATOR)
+
+          prefix = "#{service}:"
+          held_lock = locks.find { |l| l.start_with?(prefix) }
+          return unless held_lock
+
+          msg = "Deadlock detected: outbound call to #{service}##{handler} " \
+                "while exclusive lock held on #{held_lock}. " \
+                'This call will block forever.'
+          Kernel.raise DeadlockError, msg
         end
       end
     end

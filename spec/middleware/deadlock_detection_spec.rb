@@ -6,16 +6,18 @@ require 'restate/errors'
 require 'restate/handler'
 require 'restate/middleware/deadlock_detection'
 
-RSpec.describe Restate::Middleware::DeadlockDetection do
-  let(:inbound) { described_class::Inbound.new }
-  let(:outbound) { described_class::Outbound.new }
+DD = Restate::Middleware::DeadlockDetection
+
+RSpec.describe DD do
+  let(:inbound) { DD::Inbound.new }
+  let(:outbound) { DD::Outbound.new }
 
   before do
-    described_class.held_locks = Set.new
+    DD.held_locks = Set.new
   end
 
   after do
-    described_class.held_locks = Set.new
+    DD.held_locks = Set.new
   end
 
   def make_handler(service_kind:, service_name:, handler_name:, handler_kind:)
@@ -37,7 +39,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
     ctx
   end
 
-  describe Restate::Middleware::DeadlockDetection::Inbound do
+  describe DD::Inbound do
     let(:vo_exclusive) do
       make_handler(service_kind: 'object', service_name: 'Account',
                    handler_name: 'transfer', handler_kind: 'exclusive')
@@ -74,9 +76,9 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
         key: 'alice'
       )
 
-      expect {
+      expect do
         inbound.call(vo_exclusive, ctx) { :ok }
-      }.to raise_error(described_class::DeadlockError) { |e|
+      end.to raise_error(DD::DeadlockError) { |e|
         expect(e.message).to include('Deadlock detected')
         expect(e.message).to include('Account')
         expect(e.message).to include('alice')
@@ -98,7 +100,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
       ctx = make_ctx(headers: {}, key: 'alice')
 
       inbound.call(vo_exclusive, ctx) do
-        locks = described_class.held_locks
+        locks = DD.held_locks
         expect(locks).to include('Account:alice')
         :ok
       end
@@ -108,7 +110,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
       ctx = make_ctx(headers: {}, key: 'alice')
 
       inbound.call(vo_shared, ctx) do
-        locks = described_class.held_locks
+        locks = DD.held_locks
         expect(locks).not_to include('Account:alice')
         :ok
       end
@@ -116,25 +118,25 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
 
     it 'restores previous locks after handler completes' do
       previous = Set.new(['OtherVO:other-key'])
-      described_class.held_locks = previous
+      DD.held_locks = previous
 
       ctx = make_ctx(headers: {}, key: 'alice')
       inbound.call(vo_exclusive, ctx) { :ok }
 
-      expect(described_class.held_locks).to eq(previous)
+      expect(DD.held_locks).to eq(previous)
     end
 
     it 'restores previous locks even on error' do
       previous = Set.new(['OtherVO:other-key'])
-      described_class.held_locks = previous
+      DD.held_locks = previous
 
       ctx = make_ctx(headers: {}, key: 'alice')
 
-      expect {
+      expect do
         inbound.call(vo_exclusive, ctx) { raise 'boom' }
-      }.to raise_error(RuntimeError, 'boom')
+      end.to raise_error(RuntimeError, 'boom')
 
-      expect(described_class.held_locks).to eq(previous)
+      expect(DD.held_locks).to eq(previous)
     end
 
     it 'skips detection for basic services' do
@@ -151,7 +153,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
       )
 
       inbound.call(vo_exclusive, ctx) do
-        locks = described_class.held_locks
+        locks = DD.held_locks
         expect(locks).to include('OtherVO:other-key')
         expect(locks).to include('Account:alice')
         :ok
@@ -165,7 +167,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
       )
 
       inbound.call(vo_exclusive, ctx) do
-        locks = described_class.held_locks
+        locks = DD.held_locks
         expect(locks).to include('ServiceA:key1')
         expect(locks).to include('ServiceB:key2')
         expect(locks).to include('Account:alice')
@@ -174,9 +176,9 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
     end
   end
 
-  describe Restate::Middleware::DeadlockDetection::Outbound do
+  describe DD::Outbound do
     it 'injects held locks header' do
-      described_class.held_locks = Set.new(['SomeVO:some-key'])
+      DD.held_locks = Set.new(['SomeVO:some-key'])
       headers = {}
 
       outbound.call('OtherVO', 'some_handler', headers) { :ok }
@@ -193,12 +195,12 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
     end
 
     it 'raises DeadlockError when calling same service that holds lock' do
-      described_class.held_locks = Set.new(['MyVO:my-key'])
+      DD.held_locks = Set.new(['MyVO:my-key'])
       headers = {}
 
-      expect {
+      expect do
         outbound.call('MyVO', 'some_handler', headers) { :ok }
-      }.to raise_error(described_class::DeadlockError) { |e|
+      end.to raise_error(DD::DeadlockError) { |e|
         expect(e.message).to include('Deadlock detected')
         expect(e.message).to include('MyVO')
         expect(e.status_code).to eq(409)
@@ -206,7 +208,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
     end
 
     it 'allows calls to a different service' do
-      described_class.held_locks = Set.new(['MyVO:my-key'])
+      DD.held_locks = Set.new(['MyVO:my-key'])
       headers = {}
 
       result = outbound.call('OtherService', 'some_handler', headers) { :ok }
@@ -214,7 +216,7 @@ RSpec.describe Restate::Middleware::DeadlockDetection do
     end
 
     it 'includes all held locks in header' do
-      described_class.held_locks = Set.new(['ServiceA:key1', 'ServiceB:key2'])
+      DD.held_locks = Set.new(['ServiceA:key1', 'ServiceB:key2'])
       headers = {}
 
       outbound.call('ServiceC', 'handler', headers) { :ok }
