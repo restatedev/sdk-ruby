@@ -135,6 +135,18 @@ module Restate
     # Reject an awakeable with a terminal failure.
     def reject_awakeable(awakeable_id, message, code: 500); end
 
+    # Wait for a named signal addressed to this invocation.
+    # Returns a DurableFuture that resolves once another invocation calls
+    # +resolve_signal+ or +reject_signal+ with the same name targeting this
+    # invocation's id.
+    def signal(name, serde: JsonSerde); end
+
+    # Send a success value to a named signal on another invocation.
+    def resolve_signal(invocation_id, name, payload, serde: JsonSerde); end
+
+    # Send a terminal failure to a named signal on another invocation.
+    def reject_signal(invocation_id, name, message, code: 500); end
+
     # Request cancellation of another invocation.
     def cancel_invocation(invocation_id); end
 

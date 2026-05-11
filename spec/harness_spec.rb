@@ -171,6 +171,30 @@ class TestFluentOrchestrator < Restate::Service
   end
 end
 
+# ── Signal test services ──────────────────────────────────────
+
+class TestSignal < Restate::Service
+  handler def wait_for_signal(name)
+    Restate.signal(name).await
+  end
+
+  handler def wait_for_two
+    a = Restate.signal('signalA').await
+    b = Restate.signal('signalB').await
+    { 'a' => a, 'b' => b }
+  end
+
+  handler def resolve_signal(req)
+    Restate.resolve_signal(req['invocation_id'], req['name'], req['value'])
+    'ok'
+  end
+
+  handler def reject_signal(req)
+    Restate.reject_signal(req['invocation_id'], req['name'], req['reason'])
+    'ok'
+  end
+end
+
 # ── Helpers ──────────────────────────────────────────────────
 
 def post_json(base_url, path, body, headers: {})
@@ -183,6 +207,21 @@ def post_json(base_url, path, body, headers: {})
   Net::HTTP.start(uri.hostname, uri.port, read_timeout: 30) { |http| http.request(request) }
 end
 
+# Fire-and-forget send via the Restate ingress. Returns the invocation id.
+def send_async(base_url, path, body, headers: {})
+  response = post_json(base_url, "#{path}/send", body, headers: headers)
+  raise "send_async failed: #{response.code} #{response.body}" unless response.code.to_i.between?(200, 299)
+
+  JSON.parse(response.body).fetch('invocationId')
+end
+
+# Attach to a running invocation by id and wait for its result.
+def attach_invocation(base_url, invocation_id)
+  uri = URI("#{base_url}/restate/invocation/#{invocation_id}/attach")
+  request = Net::HTTP::Get.new(uri)
+  Net::HTTP.start(uri.hostname, uri.port, read_timeout: 60) { |http| http.request(request) }
+end
+
 # ── Tests ────────────────────────────────────────────────────
 
 RSpec.describe Restate::Testing do
@@ -191,7 +230,8 @@ RSpec.describe Restate::Testing do
       TestGreeter, TestCounter, TestWorker, TestOrchestrator, TestRunSync, TestFiberLocalCtx,
       TypedGreeter, MiddlewareTestService,
       TestDeclCounter, TestFluentWorker, TestFluentOrchestrator,
-      OutboundTargetService, OutboundCallerService
+      OutboundTargetService, OutboundCallerService,
+      TestSignal
     ) do |endpoint|
       endpoint.use(TestHeaderMiddleware)
       endpoint.use_outbound(TestOutboundMiddleware)
@@ -359,5 +399,45 @@ RSpec.describe Restate::Testing do
 
     result = Restate.client.service("TestGreeter").greet("ConfigTest")
     expect(result).to eq("Hello, ConfigTest!")
+  end
+
+  # ── Signals ──
+
+  it "resolves a named signal with a value" do
+    inv_id = send_async(@harness.ingress_url, "/TestSignal/wait_for_signal", "mySignal")
+
+    response = post_json(@harness.ingress_url, "/TestSignal/resolve_signal",
+                         { "invocation_id" => inv_id, "name" => "mySignal", "value" => "hello" })
+    expect(response.code).to eq("200")
+
+    result = attach_invocation(@harness.ingress_url, inv_id)
+    expect(result.code).to eq("200")
+    expect(JSON.parse(result.body)).to eq("hello")
+  end
+
+  it "rejects a named signal as a terminal error" do
+    inv_id = send_async(@harness.ingress_url, "/TestSignal/wait_for_signal", "mySignal")
+
+    response = post_json(@harness.ingress_url, "/TestSignal/reject_signal",
+                         { "invocation_id" => inv_id, "name" => "mySignal", "reason" => "boom" })
+    expect(response.code).to eq("200")
+
+    result = attach_invocation(@harness.ingress_url, inv_id)
+    expect(result.code).to eq("500")
+    expect(result.body).to include("boom")
+  end
+
+  it "delivers two independently named signals" do
+    inv_id = send_async(@harness.ingress_url, "/TestSignal/wait_for_two", nil)
+
+    # Resolve in reverse name order to confirm signals are independent.
+    post_json(@harness.ingress_url, "/TestSignal/resolve_signal",
+              { "invocation_id" => inv_id, "name" => "signalB", "value" => "b-value" })
+    post_json(@harness.ingress_url, "/TestSignal/resolve_signal",
+              { "invocation_id" => inv_id, "name" => "signalA", "value" => "a-value" })
+
+    result = attach_invocation(@harness.ingress_url, inv_id)
+    expect(result.code).to eq("200")
+    expect(JSON.parse(result.body)).to eq("a" => "a-value", "b" => "b-value")
   end
 end
