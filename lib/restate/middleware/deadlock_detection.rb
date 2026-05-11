@@ -1,6 +1,9 @@
 # typed: false
 # frozen_string_literal: true
 
+require 'base64'
+require 'set'
+
 module Restate
   module Middleware
     # Detects VirtualObject deadlocks caused by re-entrant calls to a VO whose
@@ -27,9 +30,18 @@ module Restate
     #
     # === Outbound side
     #
-    # Injects the held-locks header into every outbound service call, and also
-    # detects same-service deadlocks on the outbound side (calling the same VO
-    # service while holding its lock).
+    # Injects the held-locks header into every outbound service call. When
+    # handler metadata is available (the target service class is known), only
+    # raises for exclusive handlers — shared handler calls are safe. Falls
+    # back to raising for any same-service call when metadata is unavailable
+    # (e.g., calling by string name to an external service).
+    #
+    # == Wire format
+    #
+    # Lock entries are encoded as +base64url(service).base64url(key)+ and
+    # separated by commas. Base64url encoding ensures arbitrary service names
+    # and keys (including those containing +.+, +,+, or non-ASCII characters)
+    # are handled correctly.
     #
     # == Journal determinism
     #
@@ -45,27 +57,59 @@ module Restate
     #
     module DeadlockDetection
       HEADER = 'x-restate-held-locks'
-      SEPARATOR = ','
+      ENTRY_SEPARATOR = ','
+      FIELD_SEPARATOR = '.'
       DEADLOCK_STATUS_CODE = 409
 
-      # Thread-local storage key for the current set of held locks.
-      # Uses Thread.current[] (fiber-scoped in Ruby 3.0+) to match the SDK's
-      # context storage pattern and prevent leaks across child fibers.
       THREAD_KEY = :restate_held_exclusive_locks
 
       class << self
         # Returns the current set of held exclusive locks for this fiber.
+        # Each entry is a two-element array: [service_name, key].
         #
-        # @return [Set<String>] Lock identifiers in the form "ServiceName:key"
+        # @return [Set<Array<String>>]
         def held_locks
           Thread.current[THREAD_KEY] || Set.new
         end
 
-        # Sets the held locks for the current fiber.
-        #
-        # @param locks [Set<String>] The lock set
+        # @param locks [Set<Array<String>>]
         def held_locks=(locks)
           Thread.current[THREAD_KEY] = locks
+        end
+
+        # Encodes a [service, key] pair into a wire-safe string.
+        def encode_lock(service, key)
+          b64_svc = Base64.urlsafe_encode64(service, padding: false)
+          b64_key = Base64.urlsafe_encode64(key, padding: false)
+          "#{b64_svc}#{FIELD_SEPARATOR}#{b64_key}"
+        end
+
+        # Decodes a wire-format lock string into [service, key].
+        # Returns nil if the format is invalid.
+        def decode_lock(encoded)
+          parts = encoded.split(FIELD_SEPARATOR, 2)
+          return nil unless parts.length == 2
+
+          svc = Base64.urlsafe_decode64(parts[0]).force_encoding('UTF-8')
+          key = Base64.urlsafe_decode64(parts[1]).force_encoding('UTF-8')
+          [svc, key]
+        rescue ArgumentError
+          nil
+        end
+
+        # Serializes a set of [service, key] lock pairs into a header value.
+        def encode_header(locks)
+          locks.map { |svc, key| encode_lock(svc, key) }.join(ENTRY_SEPARATOR)
+        end
+
+        # Deserializes a header value into a Set of [service, key] pairs.
+        def decode_header(raw)
+          return Set.new if raw.nil? || raw.to_s.empty?
+
+          entries = raw.to_s.split(ENTRY_SEPARATOR).filter_map do |entry|
+            decode_lock(entry.strip)
+          end
+          Set.new(entries)
         end
       end
 
@@ -86,11 +130,6 @@ module Restate
       #   endpoint = Restate.endpoint(MyVirtualObject)
       #   endpoint.use(Restate::Middleware::DeadlockDetection::Inbound)
       class Inbound
-        # @param handler [Restate::Handler] The handler being invoked
-        # @param ctx [Restate::ServerContext] The invocation context
-        # @yield Invokes the next middleware or the handler
-        # @return [Object] The handler result
-        # @raise [DeadlockError] If the call would deadlock
         def call(handler, ctx)
           previous = DeadlockDetection.held_locks
           incoming = parse_locks(ctx)
@@ -111,15 +150,16 @@ module Restate
           return unless key
 
           svc = handler.service_tag.name
-          lock_id = "#{svc}:#{key}"
-          raise_deadlock!(svc, handler.name, key, incoming) if incoming.include?(lock_id)
-          incoming << lock_id
+          lock = [svc, key]
+          raise_deadlock!(svc, handler.name, key, incoming) if incoming.include?(lock)
+          incoming << lock
         end
 
         def raise_deadlock!(svc, handler_name, key, locks)
+          held = locks.map { |s, k| "#{s}:#{k}" }.join(', ')
           msg = "Deadlock detected: #{svc}##{handler_name} on key '#{key}' " \
                 'called while an exclusive handler holds the same VO key. ' \
-                "Held locks: #{locks.to_a.join(', ')}. " \
+                "Held locks: #{held}. " \
                 'This call will never complete.'
           Kernel.raise DeadlockError, msg
         end
@@ -127,16 +167,16 @@ module Restate
         def parse_locks(ctx)
           headers = ctx.request.headers
           raw = headers.is_a?(Hash) ? headers[HEADER] : nil
-          return Set.new if raw.nil? || raw.to_s.empty?
-
-          Set.new(raw.to_s.split(SEPARATOR).map(&:strip).reject(&:empty?))
+          DeadlockDetection.decode_header(raw)
         end
       end
 
       # Outbound middleware that propagates held locks via headers.
       #
-      # Injects the held-locks header into outbound calls and raises early
-      # if the outbound call targets a VO service whose lock is already held.
+      # When handler metadata is available (via Thread.current[:restate_outbound_handler_meta]),
+      # shared handler calls are allowed through — only exclusive handlers can deadlock.
+      # When metadata is unavailable (external service called by string name), falls
+      # back to raising for any same-service call.
       #
       # Register with: +endpoint.use_outbound(Restate::Middleware::DeadlockDetection::Outbound)+
       #
@@ -144,12 +184,6 @@ module Restate
       #   endpoint = Restate.endpoint(MyVirtualObject)
       #   endpoint.use_outbound(Restate::Middleware::DeadlockDetection::Outbound)
       class Outbound
-        # @param service [String] Target service name
-        # @param handler [String] Target handler name
-        # @param headers [Hash] Mutable headers hash for the outbound call
-        # @yield Continues the outbound call
-        # @return [Object] The call result
-        # @raise [DeadlockError] If the call would deadlock
         def call(service, handler, headers)
           locks = DeadlockDetection.held_locks
           propagate_and_check!(service, handler, headers, locks) if locks.any?
@@ -159,16 +193,22 @@ module Restate
         private
 
         def propagate_and_check!(service, handler, headers, locks)
-          headers[HEADER] = locks.to_a.join(SEPARATOR)
+          headers[HEADER] = DeadlockDetection.encode_header(locks)
 
-          prefix = "#{service}:"
-          held_lock = locks.find { |l| l.start_with?(prefix) }
+          held_lock = locks.find { |svc, _key| svc == service }
           return unless held_lock
 
+          return if target_shared?
+
           msg = "Deadlock detected: outbound call to #{service}##{handler} " \
-                "while exclusive lock held on #{held_lock}. " \
+                "while exclusive lock held on #{held_lock[0]}:#{held_lock[1]}. " \
                 'This call will block forever.'
           Kernel.raise DeadlockError, msg
+        end
+
+        def target_shared?
+          meta = Thread.current[:restate_outbound_handler_meta]
+          meta&.kind == 'shared'
         end
       end
     end
