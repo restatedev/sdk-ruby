@@ -241,6 +241,23 @@ module Restate # rubocop:disable Metrics/ModuleLength
     fetch_context!.reject_awakeable(awakeable_id, message, code: code)
   end
 
+  # ── Signals ──
+
+  # Wait for a named signal addressed to this invocation. Returns a DurableFuture.
+  def signal(name, serde: JsonSerde)
+    fetch_context!.signal(name, serde: serde)
+  end
+
+  # Send a success value to a named signal on another invocation.
+  def resolve_signal(invocation_id, name, payload, serde: JsonSerde)
+    fetch_context!.resolve_signal(invocation_id, name, payload, serde: serde)
+  end
+
+  # Send a terminal failure to a named signal on another invocation.
+  def reject_signal(invocation_id, name, message, code: 500)
+    fetch_context!.reject_signal(invocation_id, name, message, code: code)
+  end
+
   # ── Promises (Workflow only) ──
 
   # Get a durable promise value, blocking until resolved.

@@ -44,6 +44,12 @@ module Restate
   def self.resolve_awakeable: (String awakeable_id, untyped payload, ?serde: untyped) -> void
   def self.reject_awakeable: (String awakeable_id, String message, ?code: Integer) -> void
 
+  # ── Signals ──
+
+  def self.signal: (String name, ?serde: untyped) -> DurableFuture
+  def self.resolve_signal: (String invocation_id, String name, untyped payload, ?serde: untyped) -> void
+  def self.reject_signal: (String invocation_id, String name, String message, ?code: Integer) -> void
+
   # ── Promises ──
 
   def self.promise: (String name, ?serde: untyped) -> untyped

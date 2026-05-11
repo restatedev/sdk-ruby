@@ -794,6 +794,49 @@ impl RbVM {
             .map_err(core_error_to_magnus)
     }
 
+    // ── Signals ──
+
+    fn sys_signal(&self, signal_name: String) -> Result<u32, Error> {
+        self.vm
+            .borrow_mut()
+            .create_signal_handle(signal_name)
+            .map(Into::into)
+            .map_err(core_error_to_magnus)
+    }
+
+    fn sys_complete_signal_success(
+        &self,
+        target_invocation_id: String,
+        signal_name: String,
+        buffer: RString,
+    ) -> Result<(), Error> {
+        let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
+        self.vm
+            .borrow_mut()
+            .sys_complete_signal(
+                target_invocation_id,
+                signal_name,
+                NonEmptyValue::Success(bytes.into()),
+            )
+            .map_err(core_error_to_magnus)
+    }
+
+    fn sys_complete_signal_failure(
+        &self,
+        target_invocation_id: String,
+        signal_name: String,
+        failure: &RbFailure,
+    ) -> Result<(), Error> {
+        self.vm
+            .borrow_mut()
+            .sys_complete_signal(
+                target_invocation_id,
+                signal_name,
+                NonEmptyValue::Failure(failure.clone().into()),
+            )
+            .map_err(core_error_to_magnus)
+    }
+
     // ── Cancel invocation ──
 
     fn sys_cancel_invocation(&self, target_invocation_id: String) -> Result<(), Error> {
@@ -1073,6 +1116,15 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     vm_class.define_method(
         "sys_cancel_invocation",
         method!(RbVM::sys_cancel_invocation, 1),
+    )?;
+    vm_class.define_method("sys_signal", method!(RbVM::sys_signal, 1))?;
+    vm_class.define_method(
+        "sys_complete_signal_success",
+        method!(RbVM::sys_complete_signal_success, 3),
+    )?;
+    vm_class.define_method(
+        "sys_complete_signal_failure",
+        method!(RbVM::sys_complete_signal_failure, 3),
     )?;
 
     // IdentityVerifier

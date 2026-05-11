@@ -170,7 +170,8 @@ The context object that backs the `Restate.*` top-level API. Implements:
 - **Public context API** — `get`, `set`, `clear`, `clear_all`, `state_keys`, `sleep`, `run`,
   `run_sync`, `service_call`, `service_send`, `object_call`, `object_send`, `workflow_call`,
   `workflow_send`, `generic_call`, `generic_send`, `promise`, `peek_promise`, `resolve_promise`,
-  `reject_promise`, `awakeable`, `resolve_awakeable`, `reject_awakeable`, `cancel_invocation`,
+  `reject_promise`, `awakeable`, `resolve_awakeable`, `reject_awakeable`,
+  `signal`, `resolve_signal`, `reject_signal`, `cancel_invocation`,
   `wait_any`.
 - **Low-level handle API** (used by test services) — `resolve_handle`, `wait_any_handle`,
   `completed?`, `take_completed`.
@@ -463,6 +464,9 @@ the same fiber chain (which is guaranteed by Async's cooperative scheduling).
 | `sys_peek_promise(name)` | handle | Peek promise (non-blocking) |
 | `sys_complete_promise_success(name, value)` | handle | Resolve promise |
 | `sys_complete_promise_failure(name, failure)` | handle | Reject promise |
+| `sys_signal(name)` | handle | Wait for a named signal addressed to this invocation |
+| `sys_complete_signal_success(invocation_id, name, value)` | — | Send a named signal value to another invocation |
+| `sys_complete_signal_failure(invocation_id, name, failure)` | — | Reject a named signal on another invocation |
 | `sys_cancel_invocation(id)` | — | Cancel invocation |
 | `sys_write_output_success(output)` | — | Write final handler result |
 | `sys_write_output_failure(failure)` | — | Write final handler error |

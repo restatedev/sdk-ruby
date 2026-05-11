@@ -34,6 +34,9 @@ module Restate
       def sys_complete_promise_success(name, value); end
       def sys_complete_promise_failure(name, failure); end
       def sys_cancel_invocation(id); end
+      def sys_signal(name); end
+      def sys_complete_signal_success(invocation_id, name, value); end
+      def sys_complete_signal_failure(invocation_id, name, failure); end
       def sys_write_output_success(bytes); end
       def sys_write_output_failure(failure); end
       def sys_end; end

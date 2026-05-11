@@ -223,6 +223,19 @@ module Restate
       @vm.sys_cancel_invocation(invocation_id)
     end
 
+    def sys_signal(name)
+      @vm.sys_signal(name)
+    end
+
+    def sys_complete_signal_success(invocation_id, name, value)
+      @vm.sys_complete_signal_success(invocation_id, name, value)
+    end
+
+    def sys_complete_signal_failure(invocation_id, name, failure)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      @vm.sys_complete_signal_failure(invocation_id, name, native_failure)
+    end
+
     private
 
     def map_do_progress(result)
