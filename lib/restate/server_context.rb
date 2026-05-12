@@ -206,7 +206,7 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
       parameter = in_serde.serialize(arg)
-      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+      with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
         call_handle = @vm.sys_call(
           service: svc_name, handler: handler_name, parameter: parameter,
           key: key, idempotency_key: idempotency_key, headers: hdrs
@@ -223,7 +223,7 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+      with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
         invocation_id_handle = @vm.sys_send(
           service: svc_name, handler: handler_name, parameter: parameter,
           key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
@@ -239,7 +239,7 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
       parameter = in_serde.serialize(arg)
-      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+      with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
         call_handle = @vm.sys_call(
           service: svc_name, handler: handler_name, parameter: parameter,
           key: key, idempotency_key: idempotency_key, headers: hdrs
@@ -256,7 +256,7 @@ module Restate
       in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
       parameter = in_serde.serialize(arg)
       delay_ms = delay ? (delay * 1000).to_i : nil
-      with_outbound_middleware(svc_name, handler_name, headers) do |hdrs|
+      with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
         invocation_id_handle = @vm.sys_send(
           service: svc_name, handler: handler_name, parameter: parameter,
           key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
@@ -491,18 +491,25 @@ module Restate
     # Runs outbound middleware chain (Sidekiq client middleware pattern).
     # Each middleware gets +call(service, handler, headers)+ and must +yield+
     # to continue the chain. The block at the end performs the actual VM call.
-    def with_outbound_middleware(service, handler, headers, &action)
-      if @outbound_middleware.empty?
-        action.call(headers)
-      else
-        h = headers || {}
-        chain = ->(hdrs) { action.call(hdrs) }
-        @outbound_middleware.reverse_each do |mw|
-          prev = chain
-          chain = ->(hdrs) { mw.call(service, handler, hdrs) { prev.call(hdrs) } }
-        end
-        chain.call(h)
+    #
+    # The optional +handler_meta+ (a Handler struct from resolve_call_target)
+    # is exposed via Thread.current[:restate_outbound_handler_meta] so that
+    # middleware can inspect the target handler's kind without changing the
+    # middleware interface.
+    def with_outbound_middleware(service, handler, headers, handler_meta: nil, &action)
+      return action.call(headers) if @outbound_middleware.empty?
+
+      h = headers || {}
+      previous_meta = Thread.current[:restate_outbound_handler_meta]
+      Thread.current[:restate_outbound_handler_meta] = handler_meta
+      chain = ->(hdrs) { action.call(hdrs) }
+      @outbound_middleware.reverse_each do |mw|
+        prev = chain
+        chain = ->(hdrs) { mw.call(service, handler, hdrs) { prev.call(hdrs) } }
       end
+      chain.call(h)
+    ensure
+      Thread.current[:restate_outbound_handler_meta] = previous_meta
     end
 
     # ── Call target resolution ──

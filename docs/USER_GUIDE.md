@@ -749,6 +749,28 @@ Use `yield` to continue the chain. Not yielding would skip the call.
 See [`middleware_example/`](../middleware_example/) for a complete working example with real
 OpenTelemetry tracing and tenant isolation.
 
+### Built-in: Deadlock Detection
+
+The SDK ships with deadlock detection middleware that catches re-entrant VirtualObject calls that
+would otherwise block forever.
+
+Restate VirtualObjects serialize exclusive handler access per key. If handler A on VO key `"x"`
+calls handler B on the same VO key `"x"`, the second call waits for the first — which never
+finishes because it's waiting for the second. The middleware detects this pattern and raises a
+`DeadlockError` (409) immediately instead of hanging.
+
+```ruby
+endpoint = Restate.endpoint(MyVirtualObject)
+endpoint.use(Restate::Middleware::DeadlockDetection::Inbound)
+endpoint.use_outbound(Restate::Middleware::DeadlockDetection::Outbound)
+```
+
+The inbound side reads a held-locks header from the request and checks if the current exclusive
+handler targets an already-held key. The outbound side propagates the header to downstream calls
+and catches same-service deadlocks early.
+
+See [`examples/deadlock_detection.rb`](../examples/deadlock_detection.rb) for a complete example.
+
 ---
 
 ## Typed Handlers
@@ -1118,6 +1140,7 @@ The `examples/` directory contains runnable examples:
 | `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 | `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
+| `deadlock_detection.rb` | Built-in deadlock detection middleware for VirtualObjects |
 | [`middleware_example/`](../middleware_example/) | Real OpenTelemetry tracing + tenant isolation middleware (self-contained) |
 
 Run any example:
@@ -1286,6 +1309,10 @@ handle.cancel
 endpoint.use(MyMiddleware)            # Inbound (server) middleware
 endpoint.use(MyMiddleware, arg: val)  # With constructor args
 endpoint.use_outbound(MyOutbound)     # Outbound (client) middleware
+
+# Built-in: deadlock detection for VirtualObjects
+endpoint.use(Restate::Middleware::DeadlockDetection::Inbound)
+endpoint.use_outbound(Restate::Middleware::DeadlockDetection::Outbound)
 ```
 
 ### HTTP Client (External Invocation)
