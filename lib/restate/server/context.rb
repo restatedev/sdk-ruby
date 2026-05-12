@@ -299,6 +299,25 @@ module Restate
         @vm.sys_complete_awakeable_failure(awakeable_id, failure)
       end
 
+      # ── Signals ──
+
+      # Wait for a named signal addressed to this invocation. Returns a DurableFuture.
+      def signal(name, serde: JsonSerde)
+        handle = @vm.sys_signal(name)
+        DurableFuture.new(self, handle, serde: serde)
+      end
+
+      # Send a success value to a named signal on another invocation.
+      def resolve_signal(invocation_id, name, payload, serde: JsonSerde)
+        @vm.sys_complete_signal_success(invocation_id, name, serde.serialize(payload))
+      end
+
+      # Send a terminal failure to a named signal on another invocation.
+      def reject_signal(invocation_id, name, message, code: 500)
+        failure = Failure.new(code: code, message: message)
+        @vm.sys_complete_signal_failure(invocation_id, name, failure)
+      end
+
       # ── Promises (Workflow API) ──
 
       # Gets a durable promise value, blocking until resolved.
