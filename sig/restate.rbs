@@ -185,8 +185,14 @@ module Restate
 
   # ── Internal ──
 
-  class Server
-    def initialize: (untyped endpoint) -> void
+  module Server
+    class Handler
+      def initialize: (untyped endpoint) -> void
+      def call: (Hash[String, untyped] env) -> [Integer, Hash[String, String], untyped]
+    end
+
+    class Context
+    end
   end
 
   module JsonSerde
