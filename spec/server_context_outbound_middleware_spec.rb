@@ -16,7 +16,7 @@ class OutboundMiddlewareHarness
 
   private
 
-  # Extracted verbatim from ServerContext to test in isolation.
+  # Extracted verbatim from Server::Context to test in isolation.
   def with_outbound_middleware(service, handler, headers, handler_meta: nil, &action)
     return action.call(headers) if @outbound_middleware.empty?
 
@@ -50,7 +50,7 @@ class SpyMiddleware
   end
 end
 
-RSpec.describe 'ServerContext#with_outbound_middleware handler_meta plumbing' do
+RSpec.describe 'Server::Context#with_outbound_middleware handler_meta plumbing' do
   def make_handler(kind:, service_name: 'TestVO')
     Restate::Handler.new(
       service_tag: Restate::ServiceTag.new(kind: 'object', name: service_name),

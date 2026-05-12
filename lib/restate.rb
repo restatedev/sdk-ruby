@@ -11,7 +11,6 @@ require_relative 'restate/service_dsl'
 require_relative 'restate/service'
 require_relative 'restate/virtual_object'
 require_relative 'restate/workflow'
-require_relative 'restate/server_context'
 require_relative 'restate/durable_future'
 require_relative 'restate/discovery'
 require_relative 'restate/endpoint'
@@ -240,23 +239,6 @@ module Restate # rubocop:disable Metrics/ModuleLength
   # Reject an awakeable with a terminal failure.
   def reject_awakeable(awakeable_id, message, code: 500)
     fetch_context!.reject_awakeable(awakeable_id, message, code: code)
-  end
-
-  # ── Signals ──
-
-  # Wait for a named signal addressed to this invocation. Returns a DurableFuture.
-  def signal(name, serde: JsonSerde)
-    fetch_context!.signal(name, serde: serde)
-  end
-
-  # Send a success value to a named signal on another invocation.
-  def resolve_signal(invocation_id, name, payload, serde: JsonSerde)
-    fetch_context!.resolve_signal(invocation_id, name, payload, serde: serde)
-  end
-
-  # Send a terminal failure to a named signal on another invocation.
-  def reject_signal(invocation_id, name, message, code: 500)
-    fetch_context!.reject_signal(invocation_id, name, message, code: code)
   end
 
   # ── Promises (Workflow only) ──
