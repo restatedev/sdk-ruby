@@ -37,8 +37,8 @@ Naming/MethodParameterName:
 # Complex files need relaxed metrics
 Metrics/ClassLength:
   Exclude:
-    - "lib/restate/server.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/handler.rb"
+    - "lib/restate/server/context.rb"
     - "lib/restate/testing.rb"
     - "lib/restate/vm.rb"
 
@@ -47,8 +47,8 @@ Metrics/MethodLength:
     - "examples/**/*"
     - "lib/restate/discovery.rb"
     - "lib/restate/handler.rb"
-    - "lib/restate/server.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/handler.rb"
+    - "lib/restate/server/context.rb"
     - "lib/restate/service.rb"
     - "lib/restate/testing.rb"
     - "lib/restate/virtual_object.rb"
@@ -57,39 +57,39 @@ Metrics/MethodLength:
 
 Metrics/AbcSize:
   Exclude:
-    - "lib/restate/server.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/handler.rb"
+    - "lib/restate/server/context.rb"
     - "lib/restate/vm.rb"
 
 Metrics/CyclomaticComplexity:
   Exclude:
-    - "lib/restate/server.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/handler.rb"
+    - "lib/restate/server/context.rb"
     - "lib/restate/vm.rb"
 
 Metrics/PerceivedComplexity:
   Exclude:
-    - "lib/restate/server.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/handler.rb"
+    - "lib/restate/server/context.rb"
     - "lib/restate/vm.rb"
 
 Metrics/BlockLength:
   Exclude:
-    - "lib/restate/server.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/handler.rb"
+    - "lib/restate/server/context.rb"
 
 Metrics/ParameterLists:
   Exclude:
     - "lib/restate.rb"
     - "lib/restate/context.rb"
-    - "lib/restate/server_context.rb"
+    - "lib/restate/server/context.rb"
     - "lib/restate/virtual_object.rb"
     - "lib/restate/vm.rb"
 
 # The default branch handles the empty accept header case
 Lint/DuplicateBranch:
   Exclude:
-    - "lib/restate/server.rb"
+    - "lib/restate/server/handler.rb"
 
 # These marker classes are intentionally empty (used as type tags)
 Lint/EmptyClass:

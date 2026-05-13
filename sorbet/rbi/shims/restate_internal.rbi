@@ -71,8 +71,12 @@ module Restate
   class NotReady; end
   class DoWaitPendingRun; end
   class RunRetryConfig; end
-  class Server
-    def initialize(endpoint); end
+  module Server
+    class Handler
+      def initialize(endpoint); end
+    end
+
+    class Context; end
   end
 
   # Server-level types

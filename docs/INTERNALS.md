@@ -15,10 +15,10 @@ the codebase.
   Falcon (HTTP/2 server, fiber-based via Async)
       │ Rack 3 interface
       ▼
-  Restate::Server                    ← lib/restate/server.rb
+  Restate::Server::Handler           ← lib/restate/server/handler.rb
       │ routes requests, manages streaming I/O
       ▼
-  Restate::ServerContext             ← lib/restate/server_context.rb
+  Restate::Server::Context           ← lib/restate/server/context.rb
       │ progress loop, context API for handlers
       ▼
   Restate::VMWrapper                 ← lib/restate/vm.rb
@@ -123,7 +123,7 @@ Thin Ruby wrapper that:
 3. Maps native result types to Ruby-side types (e.g., `Internal::Suspended` → `Restate::Suspended`,
    `Internal::Failure` → `Restate::Failure`).
 4. Catches `Internal::VMError` from `do_progress`/`take_notification` and returns it as a value
-   (not raised), so `ServerContext` can handle it.
+   (not raised), so `Server::Context` can handle it.
 
 **Key types defined here:**
 - `Invocation` Struct: `{invocation_id, random_seed, headers, input_buffer, key}`
@@ -153,7 +153,7 @@ forced protocol setting.
 
 This is the most complex part. See [Invocation Execution Flow](#invocation-execution-flow) below.
 
-### ServerContext (`lib/restate/server_context.rb`)
+### Server::Context (`lib/restate/server/context.rb`)
 
 The context object that backs the `Restate.*` top-level API. Implements:
 
@@ -277,7 +277,7 @@ Useful for long-running handlers that need to flush work or perform cleanup befo
 | `DisconnectedError` | HTTP connection lost | No (control flow) |
 
 `SuspendedError` and `InternalError` are dangerous because bare `rescue => e` in user handlers
-will catch them. `ServerContext#enter` walks the exception cause chain to detect this.
+will catch them. `Server::Context#enter` walks the exception cause chain to detect this.
 
 ### Discovery (`lib/restate/discovery.rb`)
 
@@ -338,7 +338,7 @@ After the VM is ready:
 1. `vm.sys_input` returns the `Invocation` (id, headers, input buffer, key).
 2. A background **input reader** Async task continues reading remaining HTTP body into
    `input_queue`.
-3. A `ServerContext` is created with the VM, handler, invocation, output callback, and input queue.
+3. A `Server::Context` is created with the VM, handler, invocation, output callback, and input queue.
 
 ### Phase 3: Handler Execution (Async task)
 
@@ -717,8 +717,8 @@ so naive checks like `break unless output` create infinite loops.
 **Always use**: `break if output.nil? || output.empty?`
 
 This applies in two places:
-- `ServerContext#flush_output` (progress loop output drain)
-- `Server#process_invocation` (final output drain after handler completes)
+- `Server::Context#flush_output` (progress loop output drain)
+- `Server::Handler#process_invocation` (final output drain after handler completes)
 
 ### 3. Async::Queue, Not Thread::Queue
 
@@ -746,7 +746,7 @@ passing them to `notify_input`, `sys_set_state`, `sys_write_output_success`, etc
 ### 6. Error Handling in Handlers
 
 `SuspendedError` and `InternalError` are internal control flow exceptions. User handlers that
-use bare `rescue => e` will accidentally catch these. The `ServerContext#enter` method walks the
+use bare `rescue => e` will accidentally catch these. The `Server::Context#enter` method walks the
 exception cause chain to detect wrapped internal exceptions.
 
 ### 7. `Internal::Failure.new` Requires 3 Arguments

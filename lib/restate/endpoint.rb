@@ -133,8 +133,8 @@ module Restate
 
     # Build and return the Rack-compatible application.
     def app
-      require_relative 'server'
-      Server.new(self)
+      require_relative 'server/handler'
+      Server::Handler.new(self)
     end
 
     private
