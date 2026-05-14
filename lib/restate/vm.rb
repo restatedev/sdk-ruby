@@ -7,8 +7,13 @@ begin
   RUBY_VERSION =~ /(\d+\.\d+)/
   require_relative "#{Regexp.last_match(1)}/restate_internal"
 rescue LoadError
-  # Fall back to the default location (development builds, source gem installs)
-  require_relative 'restate_internal'
+  begin
+    # rake compile output (ext.lib_dir = 'lib/restate' in Rakefile)
+    require_relative 'restate_internal'
+  rescue LoadError
+    # gem install from source: extconf.rb builds to lib/restate_internal
+    require_relative '../restate_internal'
+  end
 end
 
 module Restate
