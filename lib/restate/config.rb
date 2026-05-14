@@ -20,9 +20,20 @@ module Restate
     attr_accessor :admin_url
 
     # Default headers sent with every ingress request.
+    # Can be a Hash or a callable (Proc/Lambda) returning a Hash.
+    # A callable is evaluated each time +Restate.client+ is called,
+    # which lets frameworks like Rails inject per-request context
+    # (e.g., team ID, shard routing, auth tokens).
+    #
+    # @example Static headers
+    #   config.ingress_headers = { "Authorization" => "Bearer tok" }
+    #
+    # @example Dynamic headers
+    #   config.ingress_headers = -> { { "X-Team-Id" => Current.team_id } }
     attr_accessor :ingress_headers
 
     # Default headers sent with every admin request.
+    # Accepts the same static Hash or callable forms as +ingress_headers+.
     attr_accessor :admin_headers
 
     def initialize
