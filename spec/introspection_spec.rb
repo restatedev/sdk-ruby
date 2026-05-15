@@ -18,8 +18,10 @@ module Restate
 
     def client
       cfg = config
+      resolve = ->(h) { h.respond_to?(:call) ? h.call : h }
       Client.new(ingress_url: cfg.ingress_url, admin_url: cfg.admin_url,
-                 ingress_headers: cfg.ingress_headers, admin_headers: cfg.admin_headers)
+                 ingress_headers: resolve.call(cfg.ingress_headers),
+                 admin_headers: resolve.call(cfg.admin_headers))
     end
   end
 end

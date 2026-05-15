@@ -76,7 +76,13 @@ module Restate # rubocop:disable Metrics/ModuleLength
   def client
     cfg = config
     Client.new(ingress_url: cfg.ingress_url, admin_url: cfg.admin_url,
-               ingress_headers: cfg.ingress_headers, admin_headers: cfg.admin_headers)
+               ingress_headers: resolve_headers(cfg.ingress_headers),
+               admin_headers: resolve_headers(cfg.admin_headers))
+  end
+
+  # @!visibility private
+  def resolve_headers(headers)
+    headers.respond_to?(:call) ? headers.call : headers
   end
 
   # ── Context accessor (internal) ──
