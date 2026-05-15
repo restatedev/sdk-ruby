@@ -50,7 +50,7 @@ module Restate
         @vm.sys_write_output_success(out_buffer)
         @vm.sys_end
       rescue TerminalError => e
-        failure = Failure.new(code: e.status_code, message: e.message)
+        failure = Failure.new(code: e.status_code, message: e.message, metadata: e.metadata)
         @vm.sys_write_output_failure(failure)
         @vm.sys_end
       rescue SuspendedError, InternalError
@@ -63,7 +63,7 @@ module Restate
         handled = false
         while cause
           if cause.is_a?(TerminalError)
-            f = Failure.new(code: cause.status_code, message: cause.message)
+            f = Failure.new(code: cause.status_code, message: cause.message, metadata: cause.metadata)
             @vm.sys_write_output_failure(f)
             @vm.sys_end
             handled = true
@@ -472,7 +472,7 @@ module Restate
         when NotReady
           raise "Unexpected NotReady for handle #{handle}"
         when Failure
-          raise TerminalError.new(result.message, status_code: result.code)
+          raise TerminalError.new(result.message, status_code: result.code, metadata: result.metadata)
         else
           block ? yield(result) : result
         end
@@ -561,7 +561,7 @@ module Restate
           buffer = serde.serialize(result)
           @vm.propose_run_completion_success(handle, buffer)
         rescue TerminalError => e
-          failure = Failure.new(code: e.status_code, message: e.message)
+          failure = Failure.new(code: e.status_code, message: e.message, metadata: e.metadata)
           @vm.propose_run_completion_failure(handle, failure)
         rescue SuspendedError, InternalError
           raise

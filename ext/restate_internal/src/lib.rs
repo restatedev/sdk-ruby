@@ -129,6 +129,7 @@ struct RbFailure {
     code: u16,
     message: String,
     stacktrace: Option<String>,
+    metadata: Vec<(String, String)>,
 }
 
 impl RbFailure {
@@ -141,6 +142,17 @@ impl RbFailure {
     fn stacktrace(&self) -> Option<&str> {
         self.stacktrace.as_deref()
     }
+    fn metadata_array(&self) -> Result<RArray, Error> {
+        let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
+        let ary = ruby.ary_new_capa(self.metadata.len());
+        for (k, v) in &self.metadata {
+            let pair = ruby.ary_new_capa(2);
+            pair.push(ruby.str_new(k))?;
+            pair.push(ruby.str_new(v))?;
+            ary.push(pair)?;
+        }
+        Ok(ary)
+    }
 }
 
 impl From<TerminalFailure> for RbFailure {
@@ -149,6 +161,7 @@ impl From<TerminalFailure> for RbFailure {
             code: f.code,
             message: f.message,
             stacktrace: None,
+            metadata: f.metadata,
         }
     }
 }
@@ -158,7 +171,7 @@ impl From<RbFailure> for TerminalFailure {
         TerminalFailure {
             code: f.code,
             message: f.message,
-            metadata: vec![],
+            metadata: f.metadata,
         }
     }
 }
@@ -929,17 +942,36 @@ fn parse_headers_array(ary: RArray) -> Result<Vec<Header>, Error> {
 
 // Constructor functions (free functions for use with function! macro)
 
-fn rb_failure_new(code: u16, message: String, stacktrace: Value) -> RbFailure {
+fn rb_failure_new(
+    code: u16,
+    message: String,
+    stacktrace: Value,
+    metadata: Value,
+) -> Result<RbFailure, Error> {
     let st = if stacktrace.is_nil() {
         None
     } else {
         Some(String::try_convert(stacktrace).unwrap_or_default())
     };
-    RbFailure {
+    let md = if metadata.is_nil() {
+        Vec::new()
+    } else {
+        let ary = RArray::try_convert(metadata)?;
+        let mut out = Vec::with_capacity(ary.len());
+        for item in ary.into_iter() {
+            let pair = RArray::try_convert(item)?;
+            let k: String = pair.entry(0)?;
+            let v: String = pair.entry(1)?;
+            out.push((k, v));
+        }
+        out
+    };
+    Ok(RbFailure {
         code,
         message,
         stacktrace: st,
-    }
+        metadata: md,
+    })
 }
 
 fn rb_exponential_retry_config_new(
@@ -1002,12 +1034,13 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     rh_class.define_method("status_code", method!(RbResponseHead::status_code, 0))?;
     rh_class.define_method("headers", method!(RbResponseHead::headers_array, 0))?;
 
-    // Failure - constructor takes (code, message, stacktrace_or_nil)
+    // Failure - constructor takes (code, message, stacktrace_or_nil, metadata_or_nil)
     let failure_class = internal.define_class("Failure", ruby.class_object())?;
-    failure_class.define_singleton_method("new", function!(rb_failure_new, 3))?;
+    failure_class.define_singleton_method("new", function!(rb_failure_new, 4))?;
     failure_class.define_method("code", method!(RbFailure::code, 0))?;
     failure_class.define_method("message", method!(RbFailure::message, 0))?;
     failure_class.define_method("stacktrace", method!(RbFailure::stacktrace, 0))?;
+    failure_class.define_method("metadata", method!(RbFailure::metadata_array, 0))?;
 
     // Void, Suspended, StateKeys
     internal.define_class("Void", ruby.class_object())?;

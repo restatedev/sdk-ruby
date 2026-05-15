@@ -19,7 +19,7 @@ end
 module Restate
   # Ruby-side data types for VM results
   Invocation = Struct.new(:invocation_id, :random_seed, :headers, :input_buffer, :key, keyword_init: true)
-  Failure = Struct.new(:code, :message, :stacktrace, keyword_init: true)
+  Failure = Struct.new(:code, :message, :stacktrace, :metadata, keyword_init: true)
 
   class NotReady; end
   class Suspended; end
@@ -162,12 +162,12 @@ module Restate
     end
 
     def propose_run_completion_failure(handle, failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil, native_metadata(failure))
       @vm.propose_run_completion_failure(handle, native_failure)
     end
 
     def propose_run_completion_transient(handle, failure:, attempt_duration_ms:, config:)
-      native_failure = Internal::Failure.new(failure.code, failure.message, failure.stacktrace)
+      native_failure = Internal::Failure.new(failure.code, failure.message, failure.stacktrace, nil)
       native_config = Internal::ExponentialRetryConfig.new(
         config.initial_interval, config.max_attempts,
         config.max_duration, config.max_interval,
@@ -181,7 +181,7 @@ module Restate
     end
 
     def sys_write_output_failure(failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil, native_metadata(failure))
       @vm.sys_write_output_failure(native_failure)
     end
 
@@ -203,7 +203,7 @@ module Restate
     end
 
     def sys_complete_awakeable_failure(awakeable_id, failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil, native_metadata(failure))
       @vm.sys_complete_awakeable_failure(awakeable_id, native_failure)
     end
 
@@ -220,7 +220,7 @@ module Restate
     end
 
     def sys_complete_promise_failure(key, failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil, native_metadata(failure))
       @vm.sys_complete_promise_failure(key, native_failure)
     end
 
@@ -237,11 +237,18 @@ module Restate
     end
 
     def sys_complete_signal_failure(invocation_id, name, failure)
-      native_failure = Internal::Failure.new(failure.code, failure.message, nil)
+      native_failure = Internal::Failure.new(failure.code, failure.message, nil, native_metadata(failure))
       @vm.sys_complete_signal_failure(invocation_id, name, native_failure)
     end
 
     private
+
+    def native_metadata(failure)
+      md = failure.metadata
+      return nil if md.nil? || md.empty?
+
+      md.map { |k, v| [k.to_s, v.to_s] }
+    end
 
     def map_do_progress(result)
       case result
@@ -275,7 +282,7 @@ module Restate
         # The native layer returns RString for both.
         result
       when Internal::Failure
-        Failure.new(code: result.code, message: result.message)
+        Failure.new(code: result.code, message: result.message, metadata: result.metadata.to_h)
       when Internal::StateKeys
         result.keys
       else

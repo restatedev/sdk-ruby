@@ -41,7 +41,7 @@ module Restate
       compact(
         protocolMode: protocol_mode,
         minProtocolVersion: 5,
-        maxProtocolVersion: 5,
+        maxProtocolVersion: 6,
         services: services
       )
     end

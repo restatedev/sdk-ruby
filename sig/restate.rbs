@@ -69,7 +69,8 @@ module Restate
 
   class TerminalError < StandardError
     attr_reader status_code: Integer
-    def initialize: (?String message, ?status_code: Integer) -> void
+    attr_reader metadata: Hash[String, String]?
+    def initialize: (?String message, ?status_code: Integer, ?metadata: Hash[String, String]?) -> void
   end
 
   class SuspendedError < StandardError

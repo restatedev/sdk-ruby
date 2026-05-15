@@ -3,12 +3,15 @@
 require 'restate'
 
 class Failing < Restate::VirtualObject
-  handler def terminallyFailingCall(msg) # rubocop:disable Naming/MethodName
-    raise Restate::TerminalError, msg
+  handler def terminallyFailingCall(failure_to_propagate) # rubocop:disable Naming/MethodName
+    raise Restate::TerminalError.new(
+      failure_to_propagate['errorMessage'],
+      metadata: failure_to_propagate['metadata']
+    )
   end
 
-  handler def callTerminallyFailingCall(msg) # rubocop:disable Naming/MethodName
-    Failing.call('random-583e1bf2').terminallyFailingCall(msg).await
+  handler def callTerminallyFailingCall(failure_to_propagate) # rubocop:disable Naming/MethodName
+    Failing.call('random-583e1bf2').terminallyFailingCall(failure_to_propagate).await
     raise 'Should not reach here'
   end
 
@@ -22,9 +25,12 @@ class Failing < Restate::VirtualObject
     4
   end
 
-  handler def terminallyFailingSideEffect(error_message) # rubocop:disable Naming/MethodName
+  handler def terminallyFailingSideEffect(failure_to_propagate) # rubocop:disable Naming/MethodName
     (Restate.run('sideEffect') do
-      raise Restate::TerminalError, error_message
+      raise Restate::TerminalError.new(
+        failure_to_propagate['errorMessage'],
+        metadata: failure_to_propagate['metadata']
+      )
     end).await
     raise 'Should not reach here'
   end

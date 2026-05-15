@@ -6,12 +6,14 @@ module Restate
   #
   # @example
   #   raise Restate::TerminalError.new('not found', status_code: 404)
+  #   raise Restate::TerminalError.new('bad input', metadata: { 'field' => 'name' })
   class TerminalError < StandardError
-    attr_reader :status_code
+    attr_reader :status_code, :metadata
 
-    def initialize(message = 'Internal Server Error', status_code: 500)
+    def initialize(message = 'Internal Server Error', status_code: 500, metadata: nil)
       super(message)
       @status_code = status_code
+      @metadata = metadata
     end
   end
 
