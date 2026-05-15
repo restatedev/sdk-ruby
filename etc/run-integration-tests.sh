@@ -11,9 +11,9 @@ set -euo pipefail
 #   ./etc/run-integration-tests.sh --skip-build # run tests only (reuse existing image)
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SDK_TEST_SUITE_VERSION="v4.1"
-JAR_URL="https://github.com/restatedev/sdk-test-suite/releases/download/${SDK_TEST_SUITE_VERSION}/restate-sdk-test-suite.jar"
-JAR_PATH="${REPO_ROOT}/tmp/restate-sdk-test-suite.jar"
+SDK_TEST_SUITE_VERSION="v1.0"
+JAR_URL="https://github.com/restatedev/e2e/releases/download/${SDK_TEST_SUITE_VERSION}/sdk-tests.jar"
+JAR_PATH="${REPO_ROOT}/tmp/sdk-tests.jar"
 SERVICE_IMAGE="restatedev/test-services-ruby"
 RESTATE_IMAGE="${RESTATE_CONTAINER_IMAGE:-ghcr.io/restatedev/restate:main}"
 REPORT_DIR="${REPO_ROOT}/tmp/test-report"
