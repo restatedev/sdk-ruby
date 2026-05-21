@@ -59,7 +59,7 @@ lib/
     ├── vm.rb                        VMWrapper — Ruby bridge to native VM
     └── workflow.rb                  Workflow class + main/handler DSL + .call/.send!
 ext/restate_internal/
-├── Cargo.toml                       Depends on restate-sdk-shared-core 0.7.0, magnus 0.7
+├── Cargo.toml                       Depends on restate-sdk-shared-core (git rev, cooperative suspensions), magnus 0.8
 └── src/lib.rs                       Rust ↔ Ruby bindings (~1095 lines)
 
 spec/
@@ -474,6 +474,41 @@ the same fiber chain (which is guaranteed by Async's cooperative scheduling).
 | `sys_write_output_failure(failure)` | — | Write final handler error |
 | `sys_end` | — | Finalize invocation |
 | `is_replaying` | bool | Check if replaying from journal |
+| `do_await(future)` | progress | Tree-aware progress driver — see [Combinators](#combinators) |
+
+---
+
+## Combinators
+
+`Restate.all` and `Restate.race` are layered on top of a tree-shaped
+`UnresolvedFuture` that the shared-core consumes via `do_await`. The Ruby
+encoding mirrors the native `WasmUnresolvedFuture`:
+
+```
+Integer handle                                  → Single(handle)
+[:first_completed,              [child, ...]]   → race / wait_any
+[:all_completed,                [child, ...]]   → all_settled (future combinator)
+[:first_succeeded_or_all_failed,[child, ...]]   → any (future combinator)
+[:all_succeeded_or_first_failed,[child, ...]]   → all
+[:unknown,                      [child, ...]]   → escape hatch when shape isn't known
+```
+
+Children may be raw handles (leaves) or nested combinator pairs. The native
+extension (`ext/restate_internal/src/lib.rs::parse_unresolved_future`) parses
+the structure into `restate_sdk_shared_core::UnresolvedFuture` and hands it to
+`CoreVM::do_await`.
+
+Why the tree matters: the shared-core uses the combinator shape to decide when
+the SDK can suspend. For `all`, suspension waits until no pending child can
+possibly complete; for `race`, suspension waits until none is in flight. The
+legacy flat `do_progress(handles)` path still works — it wraps the handle list
+into `FirstCompleted` internally — so non-combinator callers stay unchanged.
+
+The Ruby-side public API is in `Restate.all` / `Restate.race`
+(`lib/restate.rb`), implemented in `Server::Context#all` / `#race`
+(`lib/restate/server/context.rb`). Both route through
+`Server::Context#wait_combined`, which shares the progress-loop body with the
+flat `poll_or_cancel`.
 
 ---
 

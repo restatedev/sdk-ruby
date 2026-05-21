@@ -97,6 +97,16 @@ module Restate
       e
     end
 
+    # Tree-aware variant of do_progress. +future+ is either an Integer handle (Single)
+    # or a [tag_symbol, [children...]] pair (combinator). See lib/restate/combinator.rb
+    # and the Rust-side parse_unresolved_future for the supported tags.
+    def do_await(future)
+      result = @vm.do_await(future)
+      map_do_progress(result)
+    rescue Internal::VMError => e
+      e
+    end
+
     def take_notification(handle)
       result = @vm.take_notification(handle)
       map_notification(result)

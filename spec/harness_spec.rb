@@ -171,6 +171,37 @@ class TestFluentOrchestrator < Restate::Service
   end
 end
 
+# ── Combinator test services ──────────────────────────────────
+
+class TestCombinators < Restate::Service
+  handler def all_runs(_input)
+    futures = (1..3).map { |i| Restate.run("step-#{i}") { i * 10 } }
+    Restate.all(*futures)
+  end
+
+  handler def all_empty(_input)
+    Restate.all
+  end
+
+  handler def race_runs(_input)
+    fast = Restate.run('fast') { 'fast-result' }
+    slow = Restate.run('slow') { 'slow-result' }
+    Restate.race(fast, slow)
+  end
+
+  handler def race_sleep_vs_value(_input)
+    quick = Restate.run('quick') { 'value' }
+    slow_timer = Restate.sleep(60)
+    Restate.race(quick, slow_timer)
+  end
+
+  handler def all_short_circuits(_input)
+    ok = Restate.run('ok') { 'ok' }
+    bad = Restate.run('bad') { raise Restate::TerminalError.new('boom', status_code: 418) }
+    Restate.all(ok, bad)
+  end
+end
+
 # ── Signal test services ──────────────────────────────────────
 
 class TestSignal < Restate::Service
@@ -231,7 +262,8 @@ RSpec.describe Restate::Testing do
       TypedGreeter, MiddlewareTestService,
       TestDeclCounter, TestFluentWorker, TestFluentOrchestrator,
       OutboundTargetService, OutboundCallerService,
-      TestSignal
+      TestSignal,
+      TestCombinators
     ) do |endpoint|
       endpoint.use(TestHeaderMiddleware)
       endpoint.use_outbound(TestOutboundMiddleware)
@@ -425,6 +457,39 @@ RSpec.describe Restate::Testing do
     result = attach_invocation(@harness.ingress_url, inv_id)
     expect(result.code).to eq("500")
     expect(result.body).to include("boom")
+  end
+
+  # ── Combinators ──
+
+  it "resolves all futures with Restate.all and returns values in input order" do
+    response = post_json(@harness.ingress_url, "/TestCombinators/all_runs", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq([10, 20, 30])
+  end
+
+  it "returns an empty array when Restate.all is called with no futures" do
+    response = post_json(@harness.ingress_url, "/TestCombinators/all_empty", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq([])
+  end
+
+  it "returns the first settled future with Restate.race" do
+    response = post_json(@harness.ingress_url, "/TestCombinators/race_runs", nil)
+    expect(response.code).to eq("200")
+    # Either run can win; both produce valid results.
+    expect(%w[fast-result slow-result]).to include(JSON.parse(response.body))
+  end
+
+  it "races a quick run against a long sleep and resolves with the run" do
+    response = post_json(@harness.ingress_url, "/TestCombinators/race_sleep_vs_value", nil)
+    expect(response.code).to eq("200")
+    expect(JSON.parse(response.body)).to eq('value')
+  end
+
+  it "short-circuits Restate.all with the first TerminalError" do
+    response = post_json(@harness.ingress_url, "/TestCombinators/all_short_circuits", nil)
+    expect(response.code).to eq("418")
+    expect(response.body).to include('boom')
   end
 
   it "delivers two independently named signals" do

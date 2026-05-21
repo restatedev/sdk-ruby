@@ -15,15 +15,16 @@ module Restate
       @value = nil
     end
 
-    # Block until the result is available and return it. Caches across calls.
+    # Block until the result is available and return it. Caches across calls,
+    # including failures — a second await on a failed future re-raises the
+    # same +TerminalError+ rather than re-fetching from the VM (the notification
+    # is single-shot).
     #
     # @return [Object] the deserialized result
     def await
-      unless @resolved
-        raw = @ctx.resolve_handle(@handle)
-        @value = @serde ? @serde.deserialize(raw) : raw
-        @resolved = true
-      end
+      resolve! unless @resolved
+      raise @error if @error
+
       @value
     end
 
@@ -46,6 +47,17 @@ module Restate
 
       raise TimeoutError
     end
+
+    private
+
+    def resolve!
+      raw = @ctx.resolve_handle(@handle)
+      @value = @serde ? @serde.deserialize(raw) : raw
+    rescue TerminalError => e
+      @error = e
+    ensure
+      @resolved = true
+    end
   end
 
   # A durable future for service/object/workflow calls.
@@ -61,18 +73,30 @@ module Restate
     end
 
     # Block until the result is available and return it. Deserializes via +output_serde+.
+    # Caches both successes and TerminalError failures across calls.
     def await
-      unless @resolved
-        raw = @ctx.resolve_handle(@handle)
-        @value = if raw.nil? || @output_serde.nil?
-                   raw
-                 else
-                   @output_serde.deserialize(raw)
-                 end
-        @resolved = true
-      end
+      resolve_call! unless @resolved
+      raise @error if @error
+
       @value
     end
+
+    private
+
+    def resolve_call!
+      raw = @ctx.resolve_handle(@handle)
+      @value = if raw.nil? || @output_serde.nil?
+                 raw
+               else
+                 @output_serde.deserialize(raw)
+               end
+    rescue TerminalError => e
+      @error = e
+    ensure
+      @resolved = true
+    end
+
+    public
 
     # Returns the invocation ID of the remote call. Lazily resolved.
     #

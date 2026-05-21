@@ -60,6 +60,14 @@ module Restate
   # ── Futures / Metadata / Control ──
 
   def self.wait_any: (*DurableFuture futures) -> [Array[DurableFuture], Array[DurableFuture]]
+  def self.all: (*DurableFuture futures) -> Array[untyped]
+              | (Array[DurableFuture] futures) -> Array[untyped]
+  def self.race: (*DurableFuture futures) -> untyped
+               | (Array[DurableFuture] futures) -> untyped
+  def self.any: (*DurableFuture futures) -> untyped
+              | (Array[DurableFuture] futures) -> untyped
+  def self.all_settled: (*DurableFuture futures) -> Array[Hash[Symbol, untyped]]
+                      | (Array[DurableFuture] futures) -> Array[Hash[Symbol, untyped]]
   def self.request: () -> untyped
   def self.key: () -> String
   def self.cancel_invocation: (String invocation_id) -> void
@@ -97,12 +105,18 @@ module Restate
     def await: () -> untyped
     def completed?: () -> bool
     def or_timeout: (Numeric duration) -> untyped
+
+    private
+    def resolve!: () -> void
   end
 
   class DurableCallFuture < DurableFuture
     def initialize: (untyped ctx, Integer result_handle, Integer invocation_id_handle, output_serde: untyped) -> void
     def invocation_id: () -> String
     def cancel: () -> void
+
+    private
+    def resolve_call!: () -> void
   end
 
   class SendHandle

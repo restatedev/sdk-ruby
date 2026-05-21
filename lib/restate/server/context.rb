@@ -169,6 +169,68 @@ module Restate
         futures.partition(&:completed?)
       end
 
+      # Wait for all futures to complete; return their values in input order.
+      #
+      # Semantics match JS +Promise.all+: short-circuit on the first +TerminalError+,
+      # leaving any still-pending futures in the journal. The shared-core uses the
+      # combinator shape to decide when to suspend, so this is more precise than a
+      # naive loop over individual awaits.
+      def all(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        return [] if futures.empty?
+
+        wait_combined([:all_succeeded_or_first_failed, futures.map(&:handle)])
+        futures.map(&:await)
+      end
+
+      # Wait for the first future to settle; return its value. Raises +TerminalError+
+      # if the winning future failed. Semantics match JS +Promise.race+.
+      def race(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        raise ArgumentError, 'race requires at least one future' if futures.empty?
+
+        wait_combined([:first_completed, futures.map(&:handle)])
+        futures.find(&:completed?).await
+      end
+
+      # Wait for the first future to succeed; return its value. Raises a +TerminalError+
+      # only if every future fails. Semantics match JS +Promise.any+.
+      def any(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        raise ArgumentError, 'any requires at least one future' if futures.empty?
+
+        wait_combined([:first_succeeded_or_all_failed, futures.map(&:handle)])
+
+        errors = []
+        futures.each do |f|
+          next unless f.completed?
+
+          begin
+            return f.await
+          rescue TerminalError => e
+            errors << e
+          end
+        end
+        raise TerminalError.new("all futures failed: #{errors.map(&:message).join('; ')}",
+                                status_code: 500)
+      end
+
+      # Wait for every future to settle and return outcome descriptors, in input order.
+      # Each entry is +{ status: :fulfilled, value: ... }+ or
+      # +{ status: :rejected, reason: TerminalError }+. Semantics match JS +Promise.allSettled+.
+      def all_settled(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        return [] if futures.empty?
+
+        wait_combined([:all_completed, futures.map(&:handle)])
+
+        futures.map do |f|
+          { status: :fulfilled, value: f.await }
+        rescue TerminalError => e
+          { status: :rejected, reason: e }
+        end
+      end
+
       # ── Durable run (side effect) ──
 
       # Executes a durable side effect. The block runs at most once; its result is
@@ -412,12 +474,26 @@ module Restate
       end
 
       def poll_or_cancel(handles)
+        progress_loop { @vm.do_progress(handles) }
+      end
+
+      # Drive progress over a combinator tree. Returns when the combinator
+      # logically completes (the shared-core decides based on the tree shape).
+      # +future_tree+ follows the encoding documented in lib/restate/vm.rb#do_await.
+      def wait_combined(future_tree)
+        progress_loop { @vm.do_await(future_tree) }
+      end
+
+      # Shared progress-loop body for the flat (do_progress) and tree (do_await)
+      # entry points. The block makes one VM call per iteration and returns the
+      # response; this loop interprets it.
+      def progress_loop
         loop do
           flush_output
-          response = @vm.do_progress(handles)
+          response = yield
 
           if response.is_a?(Exception)
-            LOGGER.error("Exception in do_progress: #{response}")
+            LOGGER.error("Exception in progress loop: #{response}")
             raise InternalError
           end
 

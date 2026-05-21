@@ -11,7 +11,7 @@ set -euo pipefail
 #   ./etc/run-integration-tests.sh --skip-build # run tests only (reuse existing image)
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SDK_TEST_SUITE_VERSION="v1.0"
+SDK_TEST_SUITE_VERSION="v2.1"
 JAR_URL="https://github.com/restatedev/e2e/releases/download/${SDK_TEST_SUITE_VERSION}/sdk-tests.jar"
 JAR_PATH="${REPO_ROOT}/tmp/sdk-tests.jar"
 SERVICE_IMAGE="restatedev/test-services-ruby"
@@ -60,6 +60,6 @@ docker run --rm \
     --exclusions-file=/opt/exclusions.yaml \
     --service-container-env-file=/opt/service.env \
     --report-dir=/opt/test-report \
-    "${SERVICE_IMAGE}"
+    --service-container-image="${SERVICE_IMAGE}"
 
 echo "==> Done. Test report: ${REPORT_DIR}"
