@@ -13,6 +13,7 @@
 #   - Restate.service_call / Restate.service_send — explicit RPC (same thing, verbose)
 #   - Fan-out/fan-in             — launch concurrent calls, collect results
 #   - Restate.wait_any           — race multiple futures, handle first completer
+#   - future.or_timeout(seconds) — bound a single future with a deadline
 #   - Restate.awakeable          — pause until an external system calls back
 #
 # Try it:
@@ -57,6 +58,16 @@ class FanOut < Restate::Service
     # wait_any returns [completed, remaining]
     completed, _remaining = Restate.wait_any(*futures)
     completed.first.await
+  end
+
+  # Bound a single call with a deadline. +or_timeout+ races the call
+  # against a +Restate.sleep+; on timeout the remote invocation is
+  # cancelled and +Restate::TimeoutError+ (a +TerminalError+ subclass)
+  # is raised.
+  handler def with_deadline(task)
+    Worker.call.process(task).or_timeout(5)
+  rescue Restate::TimeoutError => e
+    { 'task' => task, 'error' => e.message, 'status_code' => e.status_code }
   end
 
   # Awakeable: pause until an external system resolves the callback.

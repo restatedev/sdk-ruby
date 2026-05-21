@@ -939,6 +939,25 @@ rescue Restate::TerminalError => e
 end
 ```
 
+#### TimeoutError
+
+`Restate::TimeoutError` is a `TerminalError` subclass raised by
+`DurableFuture#or_timeout` when the deadline elapses before the
+future completes (HTTP status 408). Because it inherits from
+`TerminalError`, the same `rescue` block catches it uniformly:
+
+```ruby
+begin
+  Worker.call.process(task).or_timeout(5)
+rescue Restate::TimeoutError => e
+  # specific timeout handling
+rescue Restate::TerminalError => e
+  # any other terminal failure
+end
+```
+
+See the [Timeouts](#timeouts) section above for the full API.
+
 ### Transient Errors
 
 Any `StandardError` (other than `TerminalError`) triggers a retry of the entire invocation.
@@ -1164,7 +1183,7 @@ The `examples/` directory contains runnable examples:
 | `durable_execution.rb` | `Restate.run`, `Restate.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
 | `virtual_objects.rb` | Declarative state, `handler` vs `shared`, `state_keys`, `clear_all` |
 | `workflow.rb` | Declarative state, promises, signals |
-| `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, awakeables |
+| `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, `or_timeout`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 | `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
 | `deadlock_detection.rb` | Built-in deadlock detection middleware for VirtualObjects |

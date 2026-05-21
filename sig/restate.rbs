@@ -73,6 +73,10 @@ module Restate
     def initialize: (?String message, ?status_code: Integer, ?metadata: Hash[String, String]?) -> void
   end
 
+  class TimeoutError < TerminalError
+    def initialize: (?String message, ?metadata: Hash[String, String]?) -> void
+  end
+
   class SuspendedError < StandardError
     def initialize: () -> void
   end
@@ -92,12 +96,14 @@ module Restate
     def initialize: (untyped ctx, Integer handle, ?serde: untyped) -> void
     def await: () -> untyped
     def completed?: () -> bool
+    def or_timeout: (Numeric duration) -> untyped
   end
 
   class DurableCallFuture < DurableFuture
     def initialize: (untyped ctx, Integer result_handle, Integer invocation_id_handle, output_serde: untyped) -> void
     def invocation_id: () -> String
     def cancel: () -> void
+    def or_timeout: (Numeric duration) -> untyped
   end
 
   class SendHandle
