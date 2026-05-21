@@ -270,6 +270,33 @@ Restate.sleep(5.0).await                # Sleep for 5 seconds (durable timer)
 
 The timer survives crashes — if the handler restarts, it resumes waiting for the remaining time.
 
+### Timeouts
+
+Race any `DurableFuture` against a deadline via `#or_timeout(seconds)`.
+Returns the future's value if it wins; raises `Restate::TimeoutError`
+(a `TerminalError` subclass, HTTP 408) if the sleep wins.
+
+```ruby
+# Bound a service call to 5 seconds. On timeout, the remote
+# invocation is cancelled automatically before the error is raised.
+result = Worker.call.process(task).or_timeout(5)
+
+# Works on any DurableFuture — sleeps, run-blocks, etc.
+Restate.run('expensive') { compute }.or_timeout(10)
+```
+
+**Caveat — orphan sleep**: the underlying shared-core VM has no
+primitive to cancel an in-flight sleep handle (only
+`sys_cancel_invocation` for a separate invocation), so when the
+future wins the race the sleep stays in the journal until the
+duration elapses. The wake-up is a no-op against a completed
+handler but keeps the invocation row alive in Restate's state for
+the deadline window. For long deadlines on workflows whose
+retention you care about, route the timer through a separate
+cancellable invocation (delayed `Restate.service_send` to a small
+trigger service that resolves an awakeable) and cancel the
+`SendHandle` on success.
+
 ### Service Communication
 
 #### Fluent Call API (Recommended)

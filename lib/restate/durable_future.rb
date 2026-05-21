@@ -33,6 +33,43 @@ module Restate
     def completed?
       @resolved || @ctx.completed?(@handle)
     end
+
+    # Race +self+ against a durable sleep of +duration+ seconds. Returns
+    # the future's value if it completes first; raises
+    # {Restate::TimeoutError} if the sleep wins.
+    #
+    # Mirrors +RestatePromise.orTimeout+ in the TypeScript SDK and
+    # +Awaitable.orTimeout+ in the Java SDK.
+    #
+    # == Caveat: the sleep is not cancelled when this future wins
+    #
+    # The sleep timer is journaled and the underlying shared-core VM
+    # exposes no primitive to cancel an in-flight sleep handle (only
+    # +sys_cancel_invocation+ on a separate invocation). When the
+    # future wins the race the sleep entry remains in this invocation's
+    # journal and Restate's scheduler keeps a wake-up registered until
+    # the duration elapses. The wake-up is a no-op against a completed
+    # handler, but it keeps the invocation row alive in Restate's
+    # state until the timer fires — meaningful on long durations.
+    #
+    # For long-running deadlines whose retention you care about,
+    # route the timer through a separate cancellable invocation
+    # (delayed +ctx.service_send+ to a small trigger service that
+    # resolves an awakeable) and cancel the +SendHandle+ on success.
+    #
+    # @example
+    #   ctx.service_call(MyService, :handler, payload).or_timeout(5)
+    #
+    # @param duration [Numeric] timeout in seconds
+    # @return [Object] the future's value when it wins the race
+    # @raise [Restate::TimeoutError] when the sleep wins
+    def or_timeout(duration)
+      sleep_future = Restate.sleep(duration)
+      Restate.wait_any(self, sleep_future)
+      return await if completed?
+
+      raise TimeoutError
+    end
   end
 
   # A durable future for service/object/workflow calls.
@@ -75,6 +112,32 @@ module Restate
     # Cancel the remote invocation.
     def cancel
       @ctx.cancel_invocation(invocation_id)
+    end
+
+    # Race +self+ against a durable sleep of +duration+ seconds. On
+    # success returns the call's value. On timeout the underlying
+    # remote invocation is cancelled (via +sys_cancel_invocation+) so
+    # the callee doesn't continue running after the caller has
+    # given up.
+    #
+    # Refines {DurableFuture#or_timeout} by cleaning up the *call*
+    # side of the race when the timer wins. The sleep side itself
+    # cannot be cancelled today — see the parent method's docstring.
+    #
+    # @example
+    #   result = ctx.service_call(MyService, :handler, payload).or_timeout(5)
+    #
+    # @param duration [Numeric] timeout in seconds
+    # @return [Object] the call result when this future wins
+    # @raise [Restate::TimeoutError] when the sleep wins; the remote
+    #   invocation has been cancelled before the error is raised
+    def or_timeout(duration)
+      sleep_future = Restate.sleep(duration)
+      Restate.wait_any(self, sleep_future)
+      return await if completed?
+
+      cancel
+      raise TimeoutError
     end
   end
 

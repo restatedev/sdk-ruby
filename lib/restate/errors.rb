@@ -17,6 +17,18 @@ module Restate
     end
   end
 
+  # Raised by {DurableFuture#or_timeout} when the timeout elapses
+  # before the future completes. Mirrors +TimeoutError+ in the
+  # TypeScript SDK (408 Request Timeout) and +TimeoutException+ in
+  # the Java SDK. Inherits from {TerminalError} so the same
+  # +rescue Restate::TerminalError+ block in user handlers catches
+  # timeouts alongside other terminal failures.
+  class TimeoutError < TerminalError
+    def initialize(message = 'Timeout occurred', metadata: nil)
+      super(message, status_code: 408, metadata: metadata)
+    end
+  end
+
   # Internal: raised when the VM suspends execution.
   # User code should NOT catch this.
   class SuspendedError < StandardError
