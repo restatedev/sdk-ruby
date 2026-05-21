@@ -103,7 +103,6 @@ module Restate
     def initialize: (untyped ctx, Integer result_handle, Integer invocation_id_handle, output_serde: untyped) -> void
     def invocation_id: () -> String
     def cancel: () -> void
-    def or_timeout: (Numeric duration) -> untyped
   end
 
   class SendHandle

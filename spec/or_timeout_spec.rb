@@ -72,9 +72,11 @@ RSpec.describe Restate::DurableCallFuture do
     described_class.new(ctx, :result_handle, :invocation_id_handle, output_serde: nil)
   end
 
+  # Matches TS/Java SDKs: timeout never auto-cancels the underlying call.
+  # Users who want that behavior rescue +TimeoutError+ and call +#cancel+.
   describe '#or_timeout' do
     context 'when the call completes before the sleep' do
-      it "returns the call's value and does NOT cancel the call" do
+      it "returns the call's value and does not cancel" do
         future = build_call_future
         sleep_future = Restate::DurableFuture.new(ctx, :handle_sleep)
 
@@ -86,15 +88,12 @@ RSpec.describe Restate::DurableCallFuture do
         end
 
         expect(future.or_timeout(5)).to eq({ 'ok' => true })
-        expect(ctx).not_to have_received(:cancel_invocation),
-                          'happy path must not call cancel — the remote call ' \
-                          'is the winner of the race and should be allowed to ' \
-                          'finish/return its value normally'
+        expect(ctx).not_to have_received(:cancel_invocation)
       end
     end
 
     context 'when the sleep wins the race' do
-      it 'cancels the remote invocation and raises Restate::TimeoutError' do
+      it 'raises TimeoutError without cancelling the remote invocation' do
         future = build_call_future
         sleep_future = Restate::DurableFuture.new(ctx, :handle_sleep)
 
@@ -105,11 +104,7 @@ RSpec.describe Restate::DurableCallFuture do
         end
 
         expect { future.or_timeout(5) }.to raise_error(Restate::TimeoutError)
-        expect(ctx).to have_received(:cancel_invocation).with('inv_xyz'),
-                       'timeout path must cancel the remote invocation so the ' \
-                       'callee does not continue running after the caller has ' \
-                       'given up — this is the refinement that DurableCallFuture ' \
-                       'adds on top of the base DurableFuture#or_timeout'
+        expect(ctx).not_to have_received(:cancel_invocation)
       end
     end
   end

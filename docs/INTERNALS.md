@@ -233,7 +233,7 @@ Three classes for async result handling:
 - Two handles: `result_handle` (for await) and `invocation_id_handle` (for ID)
 - `invocation_id` — lazily resolved on first access
 - `cancel` — calls `Restate.cancel_invocation(invocation_id)`
-- `or_timeout(duration)` — overrides the base to also `cancel` the remote invocation when the sleep wins, so the callee doesn't keep running after the caller has given up. The sleep side still has the orphan-handle footprint noted on the parent.
+- Inherits `or_timeout` from the parent — does **not** auto-cancel the remote invocation on timeout (matches TS/Java SDKs). Callers rescue `Restate::TimeoutError` and invoke `#cancel` themselves if they want the callee stopped.
 
 **`SendHandle`** — returned by `Restate.service_send`, `Restate.object_send`, `Restate.workflow_send`.
 - `invocation_id` — lazily resolved

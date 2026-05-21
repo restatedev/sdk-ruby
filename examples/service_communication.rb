@@ -61,12 +61,14 @@ class FanOut < Restate::Service
   end
 
   # Bound a single call with a deadline. +or_timeout+ races the call
-  # against a +Restate.sleep+; on timeout the remote invocation is
-  # cancelled and +Restate::TimeoutError+ (a +TerminalError+ subclass)
-  # is raised.
+  # against a +Restate.sleep+ and raises +Restate::TimeoutError+ if the
+  # sleep wins. The remote invocation keeps running unless you cancel
+  # it explicitly — see the rescue below.
   handler def with_deadline(task)
-    Worker.call.process(task).or_timeout(5)
+    future = Worker.call.process(task)
+    future.or_timeout(5)
   rescue Restate::TimeoutError => e
+    future.cancel
     { 'task' => task, 'error' => e.message, 'status_code' => e.status_code }
   end
 

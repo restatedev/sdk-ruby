@@ -277,12 +277,25 @@ Returns the future's value if it wins; raises `Restate::TimeoutError`
 (a `TerminalError` subclass, HTTP 408) if the sleep wins.
 
 ```ruby
-# Bound a service call to 5 seconds. On timeout, the remote
-# invocation is cancelled automatically before the error is raised.
+# Bound a service call to 5 seconds.
 result = Worker.call.process(task).or_timeout(5)
 
 # Works on any DurableFuture — sleeps, run-blocks, etc.
 Restate.run('expensive') { compute }.or_timeout(10)
+```
+
+Timeout does **not** cancel the underlying work — matches the TS and
+Java SDKs. To stop the remote invocation on a service call, rescue
+the error and call `#cancel`:
+
+```ruby
+future = Worker.call.process(task)
+begin
+  future.or_timeout(5)
+rescue Restate::TimeoutError
+  future.cancel
+  raise
+end
 ```
 
 **Caveat — orphan sleep**: the underlying shared-core VM has no
