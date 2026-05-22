@@ -287,7 +287,7 @@ Generates the JSON manifest returned at `GET /discover`. Maps internal types to 
 - Service kinds: `service`→`SERVICE`, `object`→`VIRTUAL_OBJECT`, `workflow`→`WORKFLOW`
 - Handler kinds: `exclusive`→`EXCLUSIVE`, `shared`→`SHARED`, `workflow`→`WORKFLOW`
 - Protocol mode: `bidi`→`BIDI_STREAM`, `request_response`→`REQUEST_RESPONSE`
-- Protocol versions: min=5, max=5
+- Protocol versions: min=5, max=7
 
 ### Test Harness (`lib/restate/testing.rb`)
 

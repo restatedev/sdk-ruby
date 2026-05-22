@@ -141,23 +141,21 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject # rubocop:disable
 
       when 'awaitFirstCompleted'
         # JS Promise.race semantics — first to settle (success or failure).
-        # Uses the cooperative-suspension AllCompleted variant via Restate.race.
         entries = cmd['commands'].map { |c| create_future_for_command(c) }
         futures = entries.map(&:last)
-        Restate.wait_any(*futures) # ensure at least one is ready
+        Restate.race(*futures).await
         winner = futures.find(&:completed?)
         idx = futures.index(winner)
         type, future = entries[idx]
         result = await_future_result(type, future)
 
       when 'awaitFirstSucceededOrAllFailed'
-        # JS Promise.any semantics. The shared-core variant collects failures
-        # and returns when one succeeds or all have failed. The interpreter
-        # cares about the winning value; the sleep awaitable resolves to nil,
-        # so we substitute the 'sleep' marker when that's what won.
+        # JS Promise.any semantics. The interpreter cares about the winning
+        # value; the sleep awaitable resolves to Void, so we substitute the
+        # 'sleep' marker when that's what won.
         entries = cmd['commands'].map { |c| create_future_for_command(c) }
         futures = entries.map(&:last)
-        winning_value = Restate.any(*futures)
+        winning_value = Restate.any(*futures).await
         winning_type = entries.zip(futures)
                               .find { |(_t, _f), fut| fut.completed? && safely_equal(fut, winning_value) }
                               &.first
@@ -170,7 +168,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject # rubocop:disable
         # 'err:' so the assertions can distinguish successes from failures.
         entries = cmd['commands'].map { |c| create_future_for_command(c) }
         futures = entries.map(&:last)
-        Restate.all_settled(*futures)
+        Restate.all_settled(*futures).await
         parts = entries.map do |type, future|
           "ok:#{await_future_result(type, future)}"
         rescue Restate::TerminalError => e
@@ -183,7 +181,7 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject # rubocop:disable
         # otherwise return all values joined with '|'.
         entries = cmd['commands'].map { |c| create_future_for_command(c) }
         futures = entries.map(&:last)
-        Restate.all(*futures) # raises on first failure
+        Restate.all(*futures).await # raises on first failure
         result = entries.map { |type, future| await_future_result(type, future).to_s }.join('|')
       end
 

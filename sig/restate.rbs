@@ -60,14 +60,10 @@ module Restate
   # ── Futures / Metadata / Control ──
 
   def self.wait_any: (*DurableFuture futures) -> [Array[DurableFuture], Array[DurableFuture]]
-  def self.all: (*DurableFuture futures) -> Array[untyped]
-              | (Array[DurableFuture] futures) -> Array[untyped]
-  def self.race: (*DurableFuture futures) -> untyped
-               | (Array[DurableFuture] futures) -> untyped
-  def self.any: (*DurableFuture futures) -> untyped
-              | (Array[DurableFuture] futures) -> untyped
-  def self.all_settled: (*DurableFuture futures) -> Array[Hash[Symbol, untyped]]
-                      | (Array[DurableFuture] futures) -> Array[Hash[Symbol, untyped]]
+  def self.all: (*untyped futures) -> CombinedFuture
+  def self.race: (*untyped futures) -> CombinedFuture
+  def self.any: (*untyped futures) -> CombinedFuture
+  def self.all_settled: (*untyped futures) -> CombinedFuture
   def self.request: () -> untyped
   def self.key: () -> String
   def self.cancel_invocation: (String invocation_id) -> void
@@ -117,6 +113,22 @@ module Restate
 
     private
     def resolve_call!: () -> void
+  end
+
+  class CombinedFuture
+    VALID_VARIANTS: Array[Symbol]
+    def initialize: (untyped ctx, Symbol variant, Array[untyped] children) -> void
+    def tree: () -> untyped
+    def await: () -> untyped
+    def completed?: () -> bool
+
+    private
+    def resolve_combined!: () -> void
+    def finalize_value: () -> untyped
+    def finalize_first_completed: () -> untyped
+    def finalize_all_succeeded: () -> Array[untyped]
+    def finalize_all_completed: () -> Array[Hash[Symbol, untyped]]
+    def finalize_first_succeeded: () -> untyped
   end
 
   class SendHandle

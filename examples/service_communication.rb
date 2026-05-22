@@ -55,13 +55,13 @@ class FanOut < Restate::Service
   # short-circuiting with a TerminalError if any one call fails.
   handler def all(tasks)
     futures = tasks.map { |task| Worker.call.process(task) }
-    Restate.all(*futures)
+    Restate.all(*futures).await
   end
 
   # Race two calls and return the first to settle.
   handler def race(tasks)
     futures = tasks.map { |task| Worker.call.process(task) }
-    Restate.race(*futures)
+    Restate.race(*futures).await
   end
 
   # Race a call against a sleep — handy for hard deadlines.
@@ -69,7 +69,13 @@ class FanOut < Restate::Service
     Restate.race(
       Worker.call.process(task),
       Restate.sleep(30) # 30-second deadline (winner is `nil` if the timer fires)
-    )
+    ).await
+  end
+
+  # Compose combinators: race an all-of group against a deadline.
+  handler def composed(tasks)
+    group = Restate.all(*tasks.map { |t| Worker.call.process(t) })
+    Restate.race(group, Restate.sleep(30)).await
   end
 
   # Bound a single call with a deadline. +or_timeout+ races the call
