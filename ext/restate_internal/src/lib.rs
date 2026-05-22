@@ -434,52 +434,14 @@ impl RbVM {
         self.vm.borrow().is_completed(handle.into())
     }
 
-    fn do_progress(&self, handles: RArray) -> Result<Value, Error> {
-        let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
-        let handle_vec: Vec<u32> = handles.to_vec()?;
-        let future = unresolved_future_from_handles(handle_vec);
-
-        let res = self.vm.borrow_mut().do_await(future);
-
-        match res {
-            Err(e) if e.is_suspended_error() => Ok(ruby.into_value(RbSuspended)),
-            Err(e) => Err(core_error_to_magnus(e)),
-            Ok(AwaitResponse::AnyCompleted) => {
-                Ok(ruby.into_value(RbDoProgressAnyCompleted))
-            }
-            Ok(AwaitResponse::ExecuteRun(handle)) => Ok(ruby.into_value(
-                RbDoProgressExecuteRun {
-                    handle: handle.into(),
-                },
-            )),
-            Ok(AwaitResponse::CancelSignalReceived) => {
-                Ok(ruby.into_value(RbDoProgressCancelSignalReceived))
-            }
-            Ok(AwaitResponse::WaitingExternalProgress { waiting_input, .. }) => {
-                // If we still expect more input, surface ReadFromInput so the Ruby side
-                // dequeues from the input queue (which carries body chunks, eof, and
-                // run-completion signals). When input is closed, only a pending run
-                // can wake us, hence DoWaitForPendingRun.
-                if waiting_input {
-                    Ok(ruby.into_value(RbDoProgressReadFromInput))
-                } else {
-                    Ok(ruby.into_value(RbDoWaitForPendingRun))
-                }
-            }
-        }
-    }
-
-    // Cooperative-suspension variant of do_progress. Accepts a tree describing a
-    // combinator over notification handles; the shared-core uses the tree shape to
-    // decide when the whole combinator can make progress.
-    //
-    // The Ruby-side encoding is:
-    //   Integer handle                   → Single(handle)
-    //   [:first_completed, [child, ...]]   → race / wait_any
-    //   [:all_completed, [child, ...]]     → all_settled
-    //   [:first_succeeded_or_all_failed, [child, ...]] → any
-    //   [:all_succeeded_or_first_failed, [child, ...]] → all
-    //   [:unknown, [child, ...]]           → unknown combinator
+    // Drive the VM forward against an UnresolvedFuture tree. The Ruby-side
+    // encoding is:
+    //   Integer handle                                  → Single(handle)
+    //   [:first_completed,              [child, ...]]   → race / wait_any
+    //   [:all_completed,                [child, ...]]   → all_settled
+    //   [:first_succeeded_or_all_failed,[child, ...]]   → any
+    //   [:all_succeeded_or_first_failed,[child, ...]]   → all
+    //   [:unknown,                      [child, ...]]   → unknown combinator
     fn do_await(&self, future_value: Value) -> Result<Value, Error> {
         let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
         let future = parse_unresolved_future(future_value)?;
@@ -1023,22 +985,6 @@ fn parse_unresolved_future(value: Value) -> Result<UnresolvedFuture, Error> {
     }
 }
 
-// Wraps a flat list of notification handles into the tree-shaped UnresolvedFuture
-// the shared-core now expects. Mirrors the legacy "wait for any of these" semantics:
-// a single handle becomes Single, multiple handles become FirstCompleted(Single, ...).
-fn unresolved_future_from_handles(handles: Vec<u32>) -> UnresolvedFuture {
-    match handles.as_slice() {
-        [] => UnresolvedFuture::FirstCompleted(Vec::new()),
-        [h] => UnresolvedFuture::Single(NotificationHandle::from(*h)),
-        _ => UnresolvedFuture::FirstCompleted(
-            handles
-                .into_iter()
-                .map(|h| UnresolvedFuture::Single(NotificationHandle::from(h)))
-                .collect(),
-        ),
-    }
-}
-
 fn parse_headers_array(ary: RArray) -> Result<Vec<Header>, Error> {
     let mut result = Vec::new();
     for item in ary.into_iter() {
@@ -1206,7 +1152,6 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     vm_class.define_method("take_output", method!(RbVM::take_output, 0))?;
     vm_class.define_method("is_ready_to_execute", method!(RbVM::is_ready_to_execute, 0))?;
     vm_class.define_method("is_completed", method!(RbVM::is_completed, 1))?;
-    vm_class.define_method("do_progress", method!(RbVM::do_progress, 1))?;
     vm_class.define_method("do_await", method!(RbVM::do_await, 1))?;
     vm_class.define_method("take_notification", method!(RbVM::take_notification, 1))?;
     vm_class.define_method("sys_input", method!(RbVM::sys_input, 0))?;

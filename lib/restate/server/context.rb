@@ -457,13 +457,17 @@ module Restate
         must_take_notification(handle, &)
       end
 
+      # Wait for any of the given handles to complete. Wraps the flat handle
+      # list into a +FirstCompleted+ subtree (or a +Single+ leaf for one handle)
+      # and drives the VM via +do_await+ — same path as +wait_combined+.
       def poll_or_cancel(handles)
-        progress_loop { @vm.do_progress(handles) }
+        tree = handles.length == 1 ? handles.first : [:first_completed, handles]
+        wait_combined(tree)
       end
 
-      # Shared progress-loop body for the flat (do_progress) and tree (do_await)
-      # entry points. The block makes one VM call per iteration and returns the
-      # response; this loop interprets it.
+      # Shared progress-loop body for both the simple poll_or_cancel and the
+      # tree-aware wait_combined. The block makes one VM call per iteration and
+      # returns the response; this loop interprets it.
       def progress_loop
         loop do
           flush_output

@@ -122,7 +122,7 @@ Thin Ruby wrapper that:
 2. Delegates all `sys_*` calls.
 3. Maps native result types to Ruby-side types (e.g., `Internal::Suspended` → `Restate::Suspended`,
    `Internal::Failure` → `Restate::Failure`).
-4. Catches `Internal::VMError` from `do_progress`/`take_notification` and returns it as a value
+4. Catches `Internal::VMError` from `do_await`/`take_notification` and returns it as a value
    (not raised), so `Server::Context` can handle it.
 
 **Key types defined here:**
@@ -366,7 +366,7 @@ loop:
     flush_output()  ──► drain vm.take_output → output_queue
         │
         ▼
-    vm.do_progress(handles)
+    vm.do_await(future_tree)
         │
         ├── AnyCompleted        → return (handle is done)
         ├── ReadFromInput       → dequeue from input_queue
@@ -417,7 +417,7 @@ vm.take_output → output_queue.enqueue(chunk) ··· output_queue.dequeue → y
 │    chunk = read_partial  │  │    invoke_handler(...)   │
 │    input_queue << chunk  │  │    poll_or_cancel:       │
 │  ensure:                 │  │      flush_output → out_q│
-│    input_queue << :eof   │  │      do_progress         │
+│    input_queue << :eof   │  │      do_await            │
 │                          │  │      input_q.dequeue     │
 │                          │  │  drain remaining output  │
 │                          │  │  output_queue << nil     │
@@ -434,7 +434,7 @@ The VM is a synchronous state machine. It does not do I/O itself. The SDK drives
 2. Check readiness → `is_ready_to_execute()`
 3. Get invocation → `sys_input()`
 4. Issue syscalls → `sys_get_state`, `sys_run`, `sys_call`, etc. (returns handles)
-5. Drive progress → `do_progress(handles)` (tells you what to do next)
+5. Drive progress → `do_await(future_tree)` (tells you what to do next)
 6. Collect results → `take_notification(handle)` (gets completed values)
 7. Drain output → `take_output()` (gets bytes to send back over HTTP/2)
 8. Finish → `sys_write_output_success/failure` then `sys_end`
@@ -474,7 +474,7 @@ the same fiber chain (which is guaranteed by Async's cooperative scheduling).
 | `sys_write_output_failure(failure)` | — | Write final handler error |
 | `sys_end` | — | Finalize invocation |
 | `is_replaying` | bool | Check if replaying from journal |
-| `do_await(future)` | progress | Tree-aware progress driver — see [Combinators](#combinators) |
+| `do_await(future)` | progress | Progress driver — accepts an `UnresolvedFuture` tree (or a single handle as the trivial leaf) |
 
 ---
 
@@ -501,8 +501,9 @@ the structure into `restate_sdk_shared_core::UnresolvedFuture` and hands it to
 Why the tree matters: the shared-core uses the combinator shape to decide when
 the SDK can suspend. For `all`, suspension waits until no pending child can
 possibly complete; for `race`, suspension waits until none is in flight. The
-legacy flat `do_progress(handles)` path still works — it wraps the handle list
-into `FirstCompleted` internally — so non-combinator callers stay unchanged.
+single-handle convenience path (`Server::Context#poll_or_cancel`) just wraps
+its handle list into a `FirstCompleted` subtree and hands it to the same
+`do_await` — there is no separate legacy entry point.
 
 The Ruby-side public API is in `Restate.all` / `Restate.race`
 (`lib/restate.rb`), implemented in `Server::Context#all` / `#race`
@@ -546,7 +547,7 @@ When user code calls `Restate.run('name') { ... }`:
    - Enqueues `:run_completed` to `input_queue` to wake the progress loop
 6. The progress loop continues and eventually `AnyCompleted` is returned for the handle
 
-**During replay**, the VM already has the result from the journal. `do_progress` returns
+**During replay**, the VM already has the result from the journal. `do_await` returns
 `AnyCompleted` directly — the action block is never executed.
 
 ### Background Runs (`background: true`)
