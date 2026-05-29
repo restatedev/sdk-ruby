@@ -227,11 +227,13 @@ Three classes for async result handling:
 - `await` — first call resolves via the internal context's `resolve_handle(handle)`, subsequent calls return cached value
 - `completed?` — non-blocking check via the internal context's `completed?(handle)`
 - `handle` — the raw VM notification handle (Integer)
+- `or_timeout(duration)` — races `self` against `Restate.sleep(duration)` via `Restate.wait_any`. Returns the future's value if it completes first; raises `Restate::TimeoutError` if the sleep wins. The sleep handle is **not** cancelled when this future wins — `restate-sdk-shared-core` 0.7 exposes no `sys_cancel_handle` primitive (only `sys_cancel_invocation` on a different invocation), so the journal entry remains until the timer fires. Same footprint as TS `RestatePromise.orTimeout` and Java `DurableFuture.withTimeout`.
 
 **`DurableCallFuture` < `DurableFuture`** — returned by `Restate.service_call`, `Restate.object_call`, `Restate.workflow_call`.
 - Two handles: `result_handle` (for await) and `invocation_id_handle` (for ID)
 - `invocation_id` — lazily resolved on first access
 - `cancel` — calls `Restate.cancel_invocation(invocation_id)`
+- Inherits `or_timeout` from the parent — does **not** auto-cancel the remote invocation on timeout (matches TS/Java SDKs). Callers rescue `Restate::TimeoutError` and invoke `#cancel` themselves if they want the callee stopped.
 
 **`SendHandle`** — returned by `Restate.service_send`, `Restate.object_send`, `Restate.workflow_send`.
 - `invocation_id` — lazily resolved

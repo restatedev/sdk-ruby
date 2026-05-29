@@ -33,6 +33,19 @@ module Restate
     def completed?
       @resolved || @ctx.completed?(@handle)
     end
+
+    # Race +self+ against +Restate.sleep(duration)+. Returns the value
+    # if the future wins; raises {Restate::TimeoutError} otherwise.
+    # Does not cancel the underlying work (matches TS/Java SDKs); on
+    # a {DurableCallFuture}, call +#cancel+ in the rescue if you want
+    # the remote invocation stopped.
+    def or_timeout(duration)
+      sleep_future = Restate.sleep(duration)
+      Restate.wait_any(self, sleep_future)
+      return await if completed?
+
+      raise TimeoutError
+    end
   end
 
   # A durable future for service/object/workflow calls.

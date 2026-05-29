@@ -270,6 +270,46 @@ Restate.sleep(5.0).await                # Sleep for 5 seconds (durable timer)
 
 The timer survives crashes — if the handler restarts, it resumes waiting for the remaining time.
 
+### Timeouts
+
+Race any `DurableFuture` against a deadline via `#or_timeout(seconds)`.
+Returns the future's value if it wins; raises `Restate::TimeoutError`
+(a `TerminalError` subclass, HTTP 408) if the sleep wins.
+
+```ruby
+# Bound a service call to 5 seconds.
+result = Worker.call.process(task).or_timeout(5)
+
+# Works on any DurableFuture — sleeps, run-blocks, etc.
+Restate.run('expensive') { compute }.or_timeout(10)
+```
+
+Timeout does **not** cancel the underlying work — matches the TS and
+Java SDKs. To stop the remote invocation on a service call, rescue
+the error and call `#cancel`:
+
+```ruby
+future = Worker.call.process(task)
+begin
+  future.or_timeout(5)
+rescue Restate::TimeoutError
+  future.cancel
+  raise
+end
+```
+
+**Caveat — orphan sleep**: the underlying shared-core VM has no
+primitive to cancel an in-flight sleep handle (only
+`sys_cancel_invocation` for a separate invocation), so when the
+future wins the race the sleep stays in the journal until the
+duration elapses. The wake-up is a no-op against a completed
+handler but keeps the invocation row alive in Restate's state for
+the deadline window. For long deadlines on workflows whose
+retention you care about, route the timer through a separate
+cancellable invocation (delayed `Restate.service_send` to a small
+trigger service that resolves an awakeable) and cancel the
+`SendHandle` on success.
+
 ### Service Communication
 
 #### Fluent Call API (Recommended)
@@ -912,6 +952,25 @@ rescue Restate::TerminalError => e
 end
 ```
 
+#### TimeoutError
+
+`Restate::TimeoutError` is a `TerminalError` subclass raised by
+`DurableFuture#or_timeout` when the deadline elapses before the
+future completes (HTTP status 408). Because it inherits from
+`TerminalError`, the same `rescue` block catches it uniformly:
+
+```ruby
+begin
+  Worker.call.process(task).or_timeout(5)
+rescue Restate::TimeoutError => e
+  # specific timeout handling
+rescue Restate::TerminalError => e
+  # any other terminal failure
+end
+```
+
+See the [Timeouts](#timeouts) section above for the full API.
+
 ### Transient Errors
 
 Any `StandardError` (other than `TerminalError`) triggers a retry of the entire invocation.
@@ -1137,7 +1196,7 @@ The `examples/` directory contains runnable examples:
 | `durable_execution.rb` | `Restate.run`, `Restate.run_sync`, `background: true`, `RunRetryPolicy`, `TerminalError` |
 | `virtual_objects.rb` | Declarative state, `handler` vs `shared`, `state_keys`, `clear_all` |
 | `workflow.rb` | Declarative state, promises, signals |
-| `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, awakeables |
+| `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, `or_timeout`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 | `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
 | `deadlock_detection.rb` | Built-in deadlock detection middleware for VirtualObjects |
