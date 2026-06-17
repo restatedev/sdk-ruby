@@ -13,7 +13,7 @@ module Restate
       def notify_input_closed; end
       def is_ready_to_execute?; end
       def sys_input; end
-      def do_progress(handles); end
+      def do_await(future); end
       def take_output; end
       def take_notification(handle); end
       def is_completed(handle); end

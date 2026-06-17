@@ -293,6 +293,34 @@ module Restate # rubocop:disable Metrics/ModuleLength
     fetch_context!.wait_any(*futures)
   end
 
+  # Wait for every future to complete and return their values in input order.
+  # Short-circuits on the first +TerminalError+. Accepts either splat futures or
+  # a single Array. Semantics match JS +Promise.all+.
+  def all(*futures)
+    fetch_context!.all(*futures)
+  end
+
+  # Wait for the first future to settle and return its value. Raises if the
+  # winning future failed. Accepts either splat futures or a single Array.
+  # Semantics match JS +Promise.race+.
+  def race(*futures)
+    fetch_context!.race(*futures)
+  end
+
+  # Wait for the first successful future and return its value. Raises only if
+  # every future failed terminally. Accepts splat or single Array.
+  # Semantics match JS +Promise.any+.
+  def any(*futures)
+    fetch_context!.any(*futures)
+  end
+
+  # Wait for every future to settle. Returns an Array of outcome descriptors
+  # (+{status: :fulfilled, value: ...}+ or +{status: :rejected, reason: ...}+),
+  # in input order. Semantics match JS +Promise.allSettled+.
+  def all_settled(*futures)
+    fetch_context!.all_settled(*futures)
+  end
+
   # ── Request metadata ──
 
   # Returns metadata about the current invocation (id, headers, raw body).

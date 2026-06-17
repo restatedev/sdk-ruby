@@ -1,14 +1,13 @@
 use magnus::{
     function, method,
-    prelude::*,
     value::ReprValue,
-    Error, ExceptionClass, Module, Object, RArray, RString, Ruby, Value,
+    Error, ExceptionClass, Module, Object, RArray, RString, Ruby, Symbol, TryConvert, Value,
 };
 use restate_sdk_shared_core::{
-    CallHandle, CoreVM, DoProgressResponse, Error as CoreError, Header, IdentityVerifier, Input,
+    AwaitResponse, CallHandle, CoreVM, Error as CoreError, Header, IdentityVerifier, Input,
     NonEmptyValue, NotificationHandle, ResponseHead, RetryPolicy, RunExitResult,
-    TakeOutputResult, Target, TerminalFailure, VMOptions, Value as CoreValue, VM,
-    CANCEL_NOTIFICATION_HANDLE,
+    TakeOutputResult, Target, TerminalFailure, UnresolvedFuture, VMOptions, Value as CoreValue,
+    VM, CANCEL_NOTIFICATION_HANDLE,
 };
 use std::cell::RefCell;
 use std::fmt;
@@ -435,33 +434,39 @@ impl RbVM {
         self.vm.borrow().is_completed(handle.into())
     }
 
-    fn do_progress(&self, handles: RArray) -> Result<Value, Error> {
+    // Drive the VM forward against an UnresolvedFuture tree. The Ruby-side
+    // encoding is:
+    //   Integer handle                                  → Single(handle)
+    //   [:first_completed,              [child, ...]]   → race / wait_any
+    //   [:all_completed,                [child, ...]]   → all_settled
+    //   [:first_succeeded_or_all_failed,[child, ...]]   → any
+    //   [:all_succeeded_or_first_failed,[child, ...]]   → all
+    //   [:unknown,                      [child, ...]]   → unknown combinator
+    fn do_await(&self, future_value: Value) -> Result<Value, Error> {
         let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
-        let handle_vec: Vec<u32> = handles.to_vec()?;
-        let notification_handles: Vec<NotificationHandle> =
-            handle_vec.into_iter().map(NotificationHandle::from).collect();
-
-        let res = self.vm.borrow_mut().do_progress(notification_handles);
+        let future = parse_unresolved_future(future_value)?;
+        let res = self.vm.borrow_mut().do_await(future);
 
         match res {
             Err(e) if e.is_suspended_error() => Ok(ruby.into_value(RbSuspended)),
             Err(e) => Err(core_error_to_magnus(e)),
-            Ok(DoProgressResponse::AnyCompleted) => {
+            Ok(AwaitResponse::AnyCompleted) => {
                 Ok(ruby.into_value(RbDoProgressAnyCompleted))
             }
-            Ok(DoProgressResponse::ReadFromInput) => {
-                Ok(ruby.into_value(RbDoProgressReadFromInput))
-            }
-            Ok(DoProgressResponse::ExecuteRun(handle)) => Ok(ruby.into_value(
+            Ok(AwaitResponse::ExecuteRun(handle)) => Ok(ruby.into_value(
                 RbDoProgressExecuteRun {
                     handle: handle.into(),
                 },
             )),
-            Ok(DoProgressResponse::CancelSignalReceived) => {
+            Ok(AwaitResponse::CancelSignalReceived) => {
                 Ok(ruby.into_value(RbDoProgressCancelSignalReceived))
             }
-            Ok(DoProgressResponse::WaitingPendingRun) => {
-                Ok(ruby.into_value(RbDoWaitForPendingRun))
+            Ok(AwaitResponse::WaitingExternalProgress { waiting_input, .. }) => {
+                if waiting_input {
+                    Ok(ruby.into_value(RbDoProgressReadFromInput))
+                } else {
+                    Ok(ruby.into_value(RbDoWaitForPendingRun))
+                }
             }
         }
     }
@@ -590,9 +595,12 @@ impl RbVM {
                     handler,
                     key: key_opt,
                     idempotency_key: idem_opt,
+                    scope: None,
+                    limit_key: None,
                     headers: hdr_vec,
                 },
                 bytes.into(),
+                None,
                 Default::default(),
             )
             .map(Into::into)
@@ -639,6 +647,8 @@ impl RbVM {
                     handler,
                     key: key_opt,
                     idempotency_key: idem_opt,
+                    scope: None,
+                    limit_key: None,
                     headers: hdr_vec,
                 },
                 bytes.into(),
@@ -648,6 +658,7 @@ impl RbVM {
                         .expect("Duration since unix epoch cannot fail")
                         + Duration::from_millis(millis)
                 }),
+                None,
                 Default::default(),
             )
             .map(|s| s.invocation_id_notification_handle.into())
@@ -926,6 +937,54 @@ Or remove the begin/rescue altogether if you don't need it.
 
 // ── Helpers ──
 
+// Recursive Ruby → UnresolvedFuture parser. Accepts an Integer handle, or a
+// [Symbol, Array[children]] pair encoding a combinator node. See the do_await
+// docstring for the variant tags.
+fn parse_unresolved_future(value: Value) -> Result<UnresolvedFuture, Error> {
+    let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
+
+    if let Ok(handle) = u32::try_convert(value) {
+        return Ok(UnresolvedFuture::Single(NotificationHandle::from(handle)));
+    }
+
+    let pair = RArray::try_convert(value).map_err(|_| {
+        Error::new(
+            ruby.exception_arg_error(),
+            "UnresolvedFuture must be a Integer handle or [Symbol, Array] pair",
+        )
+    })?;
+    if pair.len() != 2 {
+        return Err(Error::new(
+            ruby.exception_arg_error(),
+            "UnresolvedFuture combinator pair must be [Symbol, Array]",
+        ));
+    }
+    let tag: Symbol = pair.entry(0)?;
+    let children_arr: RArray = pair.entry(1)?;
+    let mut children = Vec::with_capacity(children_arr.len());
+    for child in children_arr.into_iter() {
+        children.push(parse_unresolved_future(child)?);
+    }
+    let tag_name = tag.name().map_err(|_| {
+        Error::new(ruby.exception_arg_error(), "UnresolvedFuture tag is not a Symbol")
+    })?;
+    match tag_name.as_ref() {
+        "first_completed" => Ok(UnresolvedFuture::FirstCompleted(children)),
+        "all_completed" => Ok(UnresolvedFuture::AllCompleted(children)),
+        "first_succeeded_or_all_failed" => {
+            Ok(UnresolvedFuture::FirstSucceededOrAllFailed(children))
+        }
+        "all_succeeded_or_first_failed" => {
+            Ok(UnresolvedFuture::AllSucceededOrFirstFailed(children))
+        }
+        "unknown" => Ok(UnresolvedFuture::Unknown(children)),
+        other => Err(Error::new(
+            ruby.exception_arg_error(),
+            format!("Unknown UnresolvedFuture combinator: {other}"),
+        )),
+    }
+}
+
 fn parse_headers_array(ary: RArray) -> Result<Vec<Header>, Error> {
     let mut result = Vec::new();
     for item in ary.into_iter() {
@@ -1093,7 +1152,7 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     vm_class.define_method("take_output", method!(RbVM::take_output, 0))?;
     vm_class.define_method("is_ready_to_execute", method!(RbVM::is_ready_to_execute, 0))?;
     vm_class.define_method("is_completed", method!(RbVM::is_completed, 1))?;
-    vm_class.define_method("do_progress", method!(RbVM::do_progress, 1))?;
+    vm_class.define_method("do_await", method!(RbVM::do_await, 1))?;
     vm_class.define_method("take_notification", method!(RbVM::take_notification, 1))?;
     vm_class.define_method("sys_input", method!(RbVM::sys_input, 0))?;
     vm_class.define_method("sys_get_state", method!(RbVM::sys_get_state, 1))?;

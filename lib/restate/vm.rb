@@ -90,8 +90,12 @@ module Restate
       @vm.is_completed(handle)
     end
 
-    def do_progress(handles)
-      result = @vm.do_progress(handles)
+    # Drive the VM forward against an +UnresolvedFuture+ tree. +future+ is either
+    # an Integer handle (Single leaf) or a +[tag_symbol, [children...]]+ pair
+    # (combinator node). See the Rust-side +parse_unresolved_future+ for the
+    # supported tags.
+    def do_await(future)
+      result = @vm.do_await(future)
       map_do_progress(result)
     rescue Internal::VMError => e
       e

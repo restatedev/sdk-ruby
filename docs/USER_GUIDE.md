@@ -411,9 +411,49 @@ futures = tasks.map { |t| Restate.service_call(Worker, :process, t) }
 results = futures.map(&:await)
 ```
 
-### Wait Any (Racing Futures)
+### Combinators (`Restate.all`, `Restate.race`, `Restate.any`, `Restate.all_settled`)
 
-Wait for the first future to complete out of several.
+The combinator methods return lazy `CombinedFuture` objects — nothing blocks
+until you call `.await`. Because they're lazy futures, they **compose**: you
+can pass one combinator into another, and the shared-core sees the full tree
+and uses the combinator shape to make better suspension decisions.
+
+```ruby
+# Single-level: wait for all three calls.
+results = Restate.all(
+  Restate.service_call(ServiceA, :work, arg1),
+  Restate.service_call(ServiceB, :work, arg2),
+  Restate.run('local-step') { compute() }
+).await
+
+# Compose: race an all-of group against a deadline.
+group = Restate.all(future_a, future_b, future_c)
+Restate.race(group, Restate.sleep(30)).await
+```
+
+All four accept either splat futures or a single `Array` and return a
+`CombinedFuture`. Call `.await` to resolve.
+
+| Method                  | JS analog               | Awaited result                                                    |
+|-------------------------|-------------------------|-------------------------------------------------------------------|
+| `Restate.all(*fs)`      | `Promise.all`           | Array of values in input order; raises on first `TerminalError`   |
+| `Restate.race(*fs)`     | `Promise.race`          | Value of the first future to settle (raises if it failed)         |
+| `Restate.any(*fs)`      | `Promise.any`           | Value of the first success; raises only if every future failed    |
+| `Restate.all_settled(*fs)` | `Promise.allSettled` | Array of `{status: :fulfilled, value:}` / `{status: :rejected, reason:}` |
+
+Common pattern — timeout via `race`:
+
+```ruby
+result = Restate.race(
+  Restate.service_call(Worker, :process, task),
+  Restate.sleep(30)              # 30-second deadline
+).await
+```
+
+**`Restate.wait_any(*futures) -> [completed, remaining]`** — lower-level
+variant that just blocks until at least one future is ready and returns
+the partition. Use this when you want to peek and continue rather than
+commit to a single winner:
 
 ```ruby
 future_a = Restate.service_call(ServiceA, :slow, arg)
@@ -1332,8 +1372,12 @@ Restate.peek_promise(name) -> value | nil
 Restate.resolve_promise(name, payload)
 Restate.reject_promise(name, message, code: 500)
 
-# Futures
-Restate.wait_any(*futures) -> [completed, remaining]
+# Futures (combinators are lazy — call .await to resolve)
+Restate.all(*futures)         -> CombinedFuture (awaits to Array)
+Restate.race(*futures)        -> CombinedFuture (awaits to value)
+Restate.any(*futures)         -> CombinedFuture (awaits to first successful value)
+Restate.all_settled(*futures) -> CombinedFuture (awaits to Array of outcome Hashes)
+Restate.wait_any(*futures)    -> [completed, remaining]   # eager, not a future
 
 # Metadata
 Restate.request -> Request{id, headers, body}

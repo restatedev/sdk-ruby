@@ -169,6 +169,44 @@ module Restate
         futures.partition(&:completed?)
       end
 
+      # Build a lazy combinator over the given futures and return it as a
+      # +CombinedFuture+. Nothing blocks until +.await+ is called, so the
+      # combinators compose: +Restate.race(Restate.all(a, b), c).await+.
+      #
+      # Semantics match JS +Promise.all+ — when awaited, returns the values in
+      # input order, short-circuiting on the first +TerminalError+.
+      def all(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        CombinedFuture.new(self, :all_succeeded_or_first_failed, futures)
+      end
+
+      # Lazy combinator. Awaiting returns the value of the first future to settle,
+      # or raises if it settled with a +TerminalError+. Matches JS +Promise.race+.
+      def race(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        raise ArgumentError, 'race requires at least one future' if futures.empty?
+
+        CombinedFuture.new(self, :first_completed, futures)
+      end
+
+      # Lazy combinator. Awaiting returns the value of the first successful future;
+      # raises only if every future fails terminally. Matches JS +Promise.any+.
+      def any(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        raise ArgumentError, 'any requires at least one future' if futures.empty?
+
+        CombinedFuture.new(self, :first_succeeded_or_all_failed, futures)
+      end
+
+      # Lazy combinator. Awaiting waits for every future to settle and returns
+      # an Array of +{ status: :fulfilled, value: ... }+ or
+      # +{ status: :rejected, reason: TerminalError }+ entries, in input order.
+      # Matches JS +Promise.allSettled+.
+      def all_settled(*futures)
+        futures = futures.first if futures.length == 1 && futures.first.is_a?(Array)
+        CombinedFuture.new(self, :all_completed, futures)
+      end
+
       # ── Durable run (side effect) ──
 
       # Executes a durable side effect. The block runs at most once; its result is
@@ -401,6 +439,14 @@ module Restate
         @invocation.key
       end
 
+      # Drive progress over a combinator tree. Returns when the combinator
+      # logically completes (the shared-core decides based on the tree shape).
+      # +future_tree+ follows the encoding documented in lib/restate/vm.rb#do_await.
+      # Public so +CombinedFuture#await+ can drive it via +@ctx.wait_combined+.
+      def wait_combined(future_tree)
+        progress_loop { @vm.do_await(future_tree) }
+      end
+
       private
 
       # ── Progress loop ──
@@ -411,13 +457,24 @@ module Restate
         must_take_notification(handle, &)
       end
 
+      # Wait for any of the given handles to complete. Wraps the flat handle
+      # list into a +FirstCompleted+ subtree (or a +Single+ leaf for one handle)
+      # and drives the VM via +do_await+ — same path as +wait_combined+.
       def poll_or_cancel(handles)
+        tree = handles.length == 1 ? handles.first : [:first_completed, handles]
+        wait_combined(tree)
+      end
+
+      # Shared progress-loop body for both the simple poll_or_cancel and the
+      # tree-aware wait_combined. The block makes one VM call per iteration and
+      # returns the response; this loop interprets it.
+      def progress_loop
         loop do
           flush_output
-          response = @vm.do_progress(handles)
+          response = yield
 
           if response.is_a?(Exception)
-            LOGGER.error("Exception in do_progress: #{response}")
+            LOGGER.error("Exception in progress loop: #{response}")
             raise InternalError
           end
 

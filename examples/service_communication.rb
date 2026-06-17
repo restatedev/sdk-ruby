@@ -12,6 +12,8 @@
 #   - Service.send!.handler(arg) — fluent fire-and-forget (optionally delayed)
 #   - Restate.service_call / Restate.service_send — explicit RPC (same thing, verbose)
 #   - Fan-out/fan-in             — launch concurrent calls, collect results
+#   - Restate.all                — wait for every future, short-circuit on terminal failure
+#   - Restate.race               — return the first future to settle (Promise.race semantics)
 #   - Restate.wait_any           — race multiple futures, handle first completer
 #   - future.or_timeout(seconds) — bound a single future with a deadline
 #   - Restate.awakeable          — pause until an external system calls back
@@ -49,15 +51,31 @@ class FanOut < Restate::Service
     { 'results' => results }
   end
 
-  # Race two calls and return the first result.
-  handler def race(tasks)
-    futures = tasks.map do |task|
-      Worker.call.process(task)
-    end
+  # Wait for every parallel call to finish. Returns an Array in input order,
+  # short-circuiting with a TerminalError if any one call fails.
+  handler def all(tasks)
+    futures = tasks.map { |task| Worker.call.process(task) }
+    Restate.all(*futures).await
+  end
 
-    # wait_any returns [completed, remaining]
-    completed, _remaining = Restate.wait_any(*futures)
-    completed.first.await
+  # Race two calls and return the first to settle.
+  handler def race(tasks)
+    futures = tasks.map { |task| Worker.call.process(task) }
+    Restate.race(*futures).await
+  end
+
+  # Race a call against a sleep — handy for hard deadlines.
+  handler def race_with_deadline(task)
+    Restate.race(
+      Worker.call.process(task),
+      Restate.sleep(30) # 30-second deadline (winner is `nil` if the timer fires)
+    ).await
+  end
+
+  # Compose combinators: race an all-of group against a deadline.
+  handler def composed(tasks)
+    group = Restate.all(*tasks.map { |t| Worker.call.process(t) })
+    Restate.race(group, Restate.sleep(30)).await
   end
 
   # Bound a single call with a deadline. +or_timeout+ races the call

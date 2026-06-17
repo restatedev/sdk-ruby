@@ -41,4 +41,14 @@ class TestUtilsService < Restate::Service
     futures.each(&:await)
     nil
   end
+
+  handler def resolveSignal(req) # rubocop:disable Naming/MethodName
+    Restate.resolve_signal(req['invocationId'], req['signalName'], req['value'])
+    nil
+  end
+
+  handler def rejectSignal(req) # rubocop:disable Naming/MethodName
+    Restate.reject_signal(req['invocationId'], req['signalName'], req['reason'])
+    nil
+  end
 end

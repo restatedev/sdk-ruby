@@ -3,14 +3,21 @@
 require 'json'
 require 'restate'
 
+# Builds a DurableFuture for the given awaitable command type. The interpreter
+# uses this to feed children of combinator commands.
 def create_future_for_command(cmd) # rubocop:disable Metrics/MethodLength
   case cmd['type']
   when 'createAwakeable'
     awk_id, future = Restate.awakeable
     Restate.set("awk-#{cmd['awakeableKey']}", awk_id)
     [:awakeable, future]
+  when 'createSignal'
+    [:signal, Restate.signal(cmd['signalName'])]
   when 'sleep'
     [:sleep, Restate.sleep(cmd['timeoutMillis'] / 1000.0)]
+  when 'runReturns'
+    value = cmd['value']
+    [:run, Restate.run('run returns value command') { value }]
   when 'runThrowTerminalException'
     reason = cmd['reason']
     future = Restate.run('run should fail command') do
@@ -21,14 +28,22 @@ def create_future_for_command(cmd) # rubocop:disable Metrics/MethodLength
 end
 
 def await_future_result(type, future)
-  # DurableFuture#await already deserializes via JsonSerde, so no extra JSON.parse needed.
-  # For sleep futures, the raw value is nil/empty — return a marker string.
-  return 'sleep' if type == :sleep
-
+  # Always block until the future settles. DurableFuture#await deserializes via
+  # JsonSerde so no extra JSON.parse is needed. Sleep futures resolve to Void;
+  # surface them as the literal 'sleep' marker the test suite expects.
   future.await
+  type == :sleep ? 'sleep' : future.await
 end
 
-class VirtualObjectCommandInterpreter < Restate::VirtualObject
+# Helper used by awaitFirstSucceededOrAllFailed to identify the winning future.
+# +.await+ on a future that already failed re-raises, so we swallow that here.
+def safely_equal(future, value)
+  future.await == value
+rescue Restate::TerminalError
+  false
+end
+
+class VirtualObjectCommandInterpreter < Restate::VirtualObject # rubocop:disable Metrics/ClassLength
   shared def getResults # rubocop:disable Naming/MethodName
     Restate.get('results') || []
   end
@@ -123,6 +138,51 @@ class VirtualObjectCommandInterpreter < Restate::VirtualObject
           end
         end
         raise Restate::TerminalError, 'All commands failed' unless found
+
+      when 'awaitFirstCompleted'
+        # JS Promise.race semantics — first to settle (success or failure).
+        entries = cmd['commands'].map { |c| create_future_for_command(c) }
+        futures = entries.map(&:last)
+        Restate.race(*futures).await
+        winner = futures.find(&:completed?)
+        idx = futures.index(winner)
+        type, future = entries[idx]
+        result = await_future_result(type, future)
+
+      when 'awaitFirstSucceededOrAllFailed'
+        # JS Promise.any semantics. The interpreter cares about the winning
+        # value; the sleep awaitable resolves to Void, so we substitute the
+        # 'sleep' marker when that's what won.
+        entries = cmd['commands'].map { |c| create_future_for_command(c) }
+        futures = entries.map(&:last)
+        winning_value = Restate.any(*futures).await
+        winning_type = entries.zip(futures)
+                              .find { |(_t, _f), fut| fut.completed? && safely_equal(fut, winning_value) }
+                              &.first
+                              &.first
+        result = winning_type == :sleep ? 'sleep' : winning_value
+
+      when 'awaitAllCompleted'
+        # JS Promise.allSettled semantics — wait for every future and join the
+        # per-future outcome strings with '|'. Each entry is tagged 'ok:' or
+        # 'err:' so the assertions can distinguish successes from failures.
+        entries = cmd['commands'].map { |c| create_future_for_command(c) }
+        futures = entries.map(&:last)
+        Restate.all_settled(*futures).await
+        parts = entries.map do |type, future|
+          "ok:#{await_future_result(type, future)}"
+        rescue Restate::TerminalError => e
+          "err:#{e.message}"
+        end
+        result = parts.join('|')
+
+      when 'awaitAllSucceededOrFirstFailed'
+        # JS Promise.all semantics — short-circuit on first terminal failure;
+        # otherwise return all values joined with '|'.
+        entries = cmd['commands'].map { |c| create_future_for_command(c) }
+        futures = entries.map(&:last)
+        Restate.all(*futures).await # raises on first failure
+        result = entries.map { |type, future| await_future_result(type, future).to_s }.join('|')
       end
 
       last_results = Restate.get('results') || []
