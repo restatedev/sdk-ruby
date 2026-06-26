@@ -59,8 +59,8 @@ lib/
     ├── vm.rb                        VMWrapper — Ruby bridge to native VM
     └── workflow.rb                  Workflow class + main/handler DSL + .call/.send!
 ext/restate_internal/
-├── Cargo.toml                       Depends on restate-sdk-shared-core (git rev, cooperative suspensions), magnus 0.8
-└── src/lib.rs                       Rust ↔ Ruby bindings (~1095 lines)
+├── Cargo.toml                       Depends on restate-sdk-shared-core 7.0.0 (crates.io), magnus 0.8
+└── src/lib.rs                       Rust ↔ Ruby bindings (~1265 lines)
 
 spec/
 ├── spec_helper.rb                   Minimal RSpec config
@@ -227,7 +227,7 @@ Three classes for async result handling:
 - `await` — first call resolves via the internal context's `resolve_handle(handle)`, subsequent calls return cached value
 - `completed?` — non-blocking check via the internal context's `completed?(handle)`
 - `handle` — the raw VM notification handle (Integer)
-- `or_timeout(duration)` — races `self` against `Restate.sleep(duration)` via `Restate.wait_any`. Returns the future's value if it completes first; raises `Restate::TimeoutError` if the sleep wins. The sleep handle is **not** cancelled when this future wins — `restate-sdk-shared-core` 0.7 exposes no `sys_cancel_handle` primitive (only `sys_cancel_invocation` on a different invocation), so the journal entry remains until the timer fires. Same footprint as TS `RestatePromise.orTimeout` and Java `DurableFuture.withTimeout`.
+- `or_timeout(duration)` — races `self` against `Restate.sleep(duration)` via `Restate.wait_any`. Returns the future's value if it completes first; raises `Restate::TimeoutError` if the sleep wins. The sleep handle is **not** cancelled when this future wins — `restate-sdk-shared-core` 7.0.0 exposes no `sys_cancel_handle` primitive (only `sys_cancel_invocation` on a different invocation), so the journal entry remains until the timer fires. Same footprint as TS `RestatePromise.orTimeout` and Java `DurableFuture.withTimeout`.
 
 **`DurableCallFuture` < `DurableFuture`** — returned by `Restate.service_call`, `Restate.object_call`, `Restate.workflow_call`.
 - Two handles: `result_handle` (for await) and `invocation_id_handle` (for ID)
@@ -455,7 +455,7 @@ the same fiber chain (which is guaranteed by Async's cooperative scheduling).
 | `sys_sleep(millis, name?)` | handle | Create sleep timer |
 | `sys_call(service, handler, param, key?, idempotency_key?, headers?)` | `CallHandle` | RPC call (two handles: result + invocation_id) |
 | `sys_send(service, handler, param, key?, delay?, idempotency_key?, headers?)` | handle | Fire-and-forget send (invocation_id handle only) |
-| `sys_run(name)` | handle | Register durable side effect |
+| `sys_run(name)` | `Run` (`handle` + `replayed`) | Register durable side effect; `replayed` is true when the result is already journaled |
 | `propose_run_completion_success(handle, output)` | — | Mark run as succeeded |
 | `propose_run_completion_failure(handle, failure)` | — | Mark run as terminally failed |
 | `propose_run_completion_transient(handle, failure, duration_ms, config)` | — | Mark run as transiently failed (retryable) |
@@ -535,8 +535,8 @@ registration options. When you pass strings, it always uses `JsonSerde`.
 
 When user code calls `Restate.run('name') { ... }`:
 
-1. `sys_run(name)` registers the run with the VM, returns a handle
-2. The action block is stored in `@run_coros_to_execute[handle]`
+1. `sys_run(name)` registers the run with the VM, returns a `Run` (`handle` + `replayed`)
+2. The action block is stored in `@run_coros_to_execute[handle]` — **only when `replayed` is false**; on replay the result is already journaled, so the closure is never scheduled
 3. A `DurableFuture` wrapping the handle is returned immediately
 4. When the future is awaited, the progress loop eventually receives `DoProgressExecuteRun(handle)`
 5. The progress loop spawns an Async task that:
@@ -547,7 +547,8 @@ When user code calls `Restate.run('name') { ... }`:
    - Enqueues `:run_completed` to `input_queue` to wake the progress loop
 6. The progress loop continues and eventually `AnyCompleted` is returned for the handle
 
-**During replay**, the VM already has the result from the journal. `do_await` returns
+**During replay**, the VM already has the result from the journal (`sys_run` returns
+`replayed: true`), so the closure is never even scheduled. `do_await` returns
 `AnyCompleted` directly — the action block is never executed.
 
 ### Background Runs (`background: true`)
