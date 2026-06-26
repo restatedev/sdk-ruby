@@ -216,14 +216,18 @@ module Restate
       # fiber event loop responsive for other concurrent handlers. Use this for
       # CPU-intensive work.
       def run(name, serde: JsonSerde, retry_policy: nil, background: false, &action)
-        handle = @vm.sys_run(name)
+        run = @vm.sys_run(name)
+        handle = run.handle
 
-        @run_coros_to_execute[handle] =
-          if background
-            -> { execute_run_threaded(handle, action, serde, retry_policy) }
-          else
-            -> { execute_run(handle, action, serde, retry_policy) }
-          end
+        # Schedule the run closure only if the run wasn't replayed.
+        unless run.replayed
+          @run_coros_to_execute[handle] =
+            if background
+              -> { execute_run_threaded(handle, action, serde, retry_policy) }
+            else
+              -> { execute_run(handle, action, serde, retry_policy) }
+            end
+        end
 
         DurableFuture.new(self, handle, serde: serde)
       end

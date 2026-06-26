@@ -5,8 +5,8 @@ use magnus::{
 };
 use restate_sdk_shared_core::{
     AwaitResponse, CallHandle, CoreVM, Error as CoreError, Header, IdentityVerifier, Input,
-    NonEmptyValue, NotificationHandle, ResponseHead, RetryPolicy, RunExitResult,
-    TakeOutputResult, Target, TerminalFailure, UnresolvedFuture, VMOptions, Value as CoreValue,
+    NonEmptyValue, NotificationHandle, OnMaxAttempts, ResponseHead, RetryPolicy, RunExitResult,
+    RunHandle, State, Target, TerminalFailure, UnresolvedFuture, VMOptions, Value as CoreValue,
     VM, CANCEL_NOTIFICATION_HANDLE,
 };
 use std::cell::RefCell;
@@ -298,6 +298,7 @@ impl From<RbExponentialRetryConfig> for RetryPolicy {
                     .max_interval
                     .map(Duration::from_millis)
                     .or_else(|| Some(Duration::from_secs(10))),
+                on_max_attempts: OnMaxAttempts::FailAsTerminal,
             }
         } else {
             RetryPolicy::Infinite
@@ -350,6 +351,30 @@ impl From<CallHandle> for RbCallHandle {
         RbCallHandle {
             invocation_id_handle: h.invocation_id_notification_handle.into(),
             result_handle: h.call_notification_handle.into(),
+        }
+    }
+}
+
+#[magnus::wrap(class = "Restate::Internal::Run")]
+struct RbRun {
+    replayed: bool,
+    handle: u32,
+}
+
+impl RbRun {
+    fn replayed(&self) -> bool {
+        self.replayed
+    }
+    fn handle(&self) -> u32 {
+        self.handle
+    }
+}
+
+impl From<RunHandle> for RbRun {
+    fn from(r: RunHandle) -> Self {
+        RbRun {
+            replayed: r.replayed,
+            handle: r.handle.into(),
         }
     }
 }
@@ -417,10 +442,8 @@ impl RbVM {
 
     fn take_output(&self) -> Result<Value, Error> {
         let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
-        Ok(match self.vm.borrow_mut().take_output() {
-            TakeOutputResult::Buffer(b) => ruby.str_from_slice(&b).as_value(),
-            TakeOutputResult::EOF => ruby.qnil().as_value(),
-        })
+        let buffer = self.vm.borrow_mut().take_output();
+        Ok(ruby.str_from_slice(&buffer).as_value())
     }
 
     fn is_ready_to_execute(&self) -> Result<bool, Error> {
@@ -665,7 +688,7 @@ impl RbVM {
             .map_err(core_error_to_magnus)
     }
 
-    fn sys_run(&self, name: String) -> Result<u32, Error> {
+    fn sys_run(&self, name: String) -> Result<RbRun, Error> {
         self.vm
             .borrow_mut()
             .sys_run(name)
@@ -738,21 +761,21 @@ impl RbVM {
     }
 
     fn is_replaying(&self) -> bool {
-        self.vm.borrow().is_replaying()
+        matches!(self.vm.borrow().state(), State::Replaying)
     }
 
     // ── Awakeables ──
 
     fn sys_awakeable(&self) -> Result<Value, Error> {
         let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
-        let (id, handle) = self
+        let awakeable = self
             .vm
             .borrow_mut()
             .sys_awakeable()
             .map_err(core_error_to_magnus)?;
         let ary = ruby.ary_new_capa(2);
-        ary.push(ruby.str_new(&id))?;
-        ary.push(u32::from(handle))?;
+        ary.push(ruby.str_new(&awakeable.id))?;
+        ary.push(u32::from(awakeable.handle))?;
         Ok(ary.as_value())
     }
 
@@ -1141,6 +1164,11 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
         method!(RbCallHandle::invocation_id_handle, 0),
     )?;
     ch_class.define_method("result_handle", method!(RbCallHandle::result_handle, 0))?;
+
+    // Run
+    let run_class = internal.define_class("Run", ruby.class_object())?;
+    run_class.define_method("replayed", method!(RbRun::replayed, 0))?;
+    run_class.define_method("handle", method!(RbRun::handle, 0))?;
 
     // VM - all methods use explicit arities
     let vm_class = internal.define_class("VM", ruby.class_object())?;

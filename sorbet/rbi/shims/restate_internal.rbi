@@ -67,6 +67,11 @@ module Restate
   class DoProgressCancelSignalReceived; end
   class DoWaitForPendingRun; end
 
+  class Run
+    def replayed; end
+    def handle; end
+  end
+
   # Additional types referenced by server_context.rb and endpoint.rb
   class NotReady; end
   class DoWaitPendingRun; end
