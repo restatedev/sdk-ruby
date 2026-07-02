@@ -12,5 +12,5 @@ doc = false
 [dependencies]
 magnus = { version = "0.8", features = ["rb-sys"] }
 rb-sys = { version = "0.9", features = ["stable-api-compiled-fallback"] }
-restate-sdk-shared-core = { version = "7.0.0" , features = ["request_identity", "sha2_random_seed"] }
+restate-sdk-shared-core = { version = "7.0.0" , features = ["request_identity", "sha2_random_seed", "rust_crypto"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
