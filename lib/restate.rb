@@ -219,15 +219,27 @@ module Restate # rubocop:disable Metrics/ModuleLength
   end
 
   # Durably call a handler using raw bytes (no serialization).
-  def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
-    fetch_context!.generic_call(service, handler, arg, key: key,
-                                                       idempotency_key: idempotency_key, headers: headers)
+  def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
+                   scope: nil, limit_key: nil)
+    fetch_context!.generic_call(service, handler, arg, key: key, idempotency_key: idempotency_key,
+                                                       headers: headers, scope: scope, limit_key: limit_key)
   end
 
   # Fire-and-forget send using raw bytes (no serialization).
-  def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
+  def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
+                   scope: nil, limit_key: nil)
     fetch_context!.generic_send(service, handler, arg, key: key, delay: delay,
-                                                       idempotency_key: idempotency_key, headers: headers)
+                                                       idempotency_key: idempotency_key, headers: headers,
+                                                       scope: scope, limit_key: limit_key)
+  end
+
+  # Returns a +ScopedContext+ that routes all outgoing calls within the given scope.
+  # See {Restate::Context#scope} for the full semantics and constraints.
+  #
+  # @example
+  #   Restate.scope("tenant1").service_call(Greeter, :greet, "World", limit_key: "tenant1/user42")
+  def scope(scope)
+    fetch_context!.scope(scope)
   end
 
   # ── Awakeables ──

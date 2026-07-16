@@ -243,8 +243,11 @@ module Restate
       # ── Service calls ──
 
       # Durably calls a handler on a Restate service and returns a future for its result.
+      #
+      # +scope+ and +limit_key+ are internal parameters set by +ScopedContext+
+      # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def service_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
-                       input_serde: NOT_SET, output_serde: NOT_SET)
+                       input_serde: NOT_SET, output_serde: NOT_SET, scope: nil, limit_key: nil)
         svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
         in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
         out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
@@ -252,7 +255,7 @@ module Restate
         with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
           call_handle = @vm.sys_call(
             service: svc_name, handler: handler_name, parameter: parameter,
-            key: key, idempotency_key: idempotency_key, headers: hdrs
+            key: key, idempotency_key: idempotency_key, headers: hdrs, scope: scope, limit_key: limit_key
           )
           DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
                                 output_serde: out_serde)
@@ -260,8 +263,11 @@ module Restate
       end
 
       # Sends a one-way invocation to a Restate service handler (fire-and-forget).
+      #
+      # +scope+ and +limit_key+ are internal parameters set by +ScopedContext+
+      # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def service_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
-                       input_serde: NOT_SET)
+                       input_serde: NOT_SET, scope: nil, limit_key: nil)
         svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
         in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
         parameter = in_serde.serialize(arg)
@@ -269,15 +275,19 @@ module Restate
         with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
           invocation_id_handle = @vm.sys_send(
             service: svc_name, handler: handler_name, parameter: parameter,
-            key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
+            key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs,
+            scope: scope, limit_key: limit_key
           )
           SendHandle.new(self, invocation_id_handle)
         end
       end
 
       # Durably calls a handler on a Restate virtual object, keyed by +key+.
+      #
+      # +scope+ and +limit_key+ are internal parameters set by +ScopedContext+
+      # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def object_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
-                      input_serde: NOT_SET, output_serde: NOT_SET)
+                      input_serde: NOT_SET, output_serde: NOT_SET, scope: nil, limit_key: nil)
         svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
         in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
         out_serde = resolve_serde(output_serde, handler_meta, :output_serde)
@@ -285,7 +295,7 @@ module Restate
         with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
           call_handle = @vm.sys_call(
             service: svc_name, handler: handler_name, parameter: parameter,
-            key: key, idempotency_key: idempotency_key, headers: hdrs
+            key: key, idempotency_key: idempotency_key, headers: hdrs, scope: scope, limit_key: limit_key
           )
           DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
                                 output_serde: out_serde)
@@ -293,8 +303,11 @@ module Restate
       end
 
       # Sends a one-way invocation to a Restate virtual object handler (fire-and-forget).
+      #
+      # +scope+ and +limit_key+ are internal parameters set by +ScopedContext+
+      # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def object_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
-                      input_serde: NOT_SET)
+                      input_serde: NOT_SET, scope: nil, limit_key: nil)
         svc_name, handler_name, handler_meta = resolve_call_target(service, handler)
         in_serde = resolve_serde(input_serde, handler_meta, :input_serde)
         parameter = in_serde.serialize(arg)
@@ -302,24 +315,32 @@ module Restate
         with_outbound_middleware(svc_name, handler_name, headers, handler_meta: handler_meta) do |hdrs|
           invocation_id_handle = @vm.sys_send(
             service: svc_name, handler: handler_name, parameter: parameter,
-            key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
+            key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs,
+            scope: scope, limit_key: limit_key
           )
           SendHandle.new(self, invocation_id_handle)
         end
       end
 
       # Durably calls a handler on a Restate workflow, keyed by +key+.
+      #
+      # +scope+ and +limit_key+ are internal parameters set by +ScopedContext+
+      # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
-                        input_serde: NOT_SET, output_serde: NOT_SET)
+                        input_serde: NOT_SET, output_serde: NOT_SET, scope: nil, limit_key: nil)
         object_call(service, handler, key, arg, idempotency_key: idempotency_key, headers: headers,
-                    input_serde: input_serde, output_serde: output_serde) # rubocop:disable Layout/HashAlignment
+                    input_serde: input_serde, output_serde: output_serde, # rubocop:disable Layout/HashAlignment
+                    scope: scope, limit_key: limit_key)
       end
 
       # Sends a one-way invocation to a Restate workflow handler (fire-and-forget).
+      #
+      # +scope+ and +limit_key+ are internal parameters set by +ScopedContext+
+      # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
-                        input_serde: NOT_SET)
+                        input_serde: NOT_SET, scope: nil, limit_key: nil)
         object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers,
-                    input_serde: input_serde) # rubocop:disable Layout/HashAlignment
+                    input_serde: input_serde, scope: scope, limit_key: limit_key) # rubocop:disable Layout/HashAlignment
       end
 
       # ── Awakeables ──
@@ -403,11 +424,15 @@ module Restate
       # ── Generic calls (raw bytes, no serde) ──
 
       # Durably calls a handler using raw bytes (no serialization). Useful for proxying.
-      def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil)
+      #
+      # Optionally accepts a +scope+ to route the call within (see +#scope+) and a
+      # +limit_key+ to enforce hierarchical concurrency limits within that scope.
+      def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
+                       scope: nil, limit_key: nil)
         with_outbound_middleware(service, handler, headers) do |hdrs|
           call_handle = @vm.sys_call(
             service: service, handler: handler, parameter: arg,
-            key: key, idempotency_key: idempotency_key, headers: hdrs
+            key: key, idempotency_key: idempotency_key, headers: hdrs, scope: scope, limit_key: limit_key
           )
           DurableCallFuture.new(self, call_handle.result_handle, call_handle.invocation_id_handle,
                                 output_serde: nil)
@@ -415,26 +440,42 @@ module Restate
       end
 
       # Sends a one-way invocation using raw bytes (no serialization). Useful for proxying.
-      def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil)
+      #
+      # Optionally accepts a +scope+ to route the send within (see +#scope+) and a
+      # +limit_key+ to enforce hierarchical concurrency limits within that scope.
+      def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
+                       scope: nil, limit_key: nil)
         delay_ms = delay ? (delay * 1000).to_i : nil
         with_outbound_middleware(service, handler, headers) do |hdrs|
           invocation_id_handle = @vm.sys_send(
             service: service, handler: handler, parameter: arg,
-            key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs
+            key: key, delay: delay_ms, idempotency_key: idempotency_key, headers: hdrs,
+            scope: scope, limit_key: limit_key
           )
           SendHandle.new(self, invocation_id_handle)
         end
       end
 
+      # Returns a +ScopedContext+ that routes all outgoing calls within the given scope.
+      # See {Restate::Context#scope} for the full semantics and constraints.
+      def scope(scope)
+        ScopedContext.new(self, scope)
+      end
+
       # ── Request metadata ──
 
-      # Returns metadata about the current invocation (id, headers, raw body).
+      # Returns metadata about the current invocation (id, headers, raw body,
+      # and — when present — the scope, limit_key, and idempotency_key it was
+      # invoked with).
       def request
         @request ||= Request.new(
           id: @invocation.invocation_id,
           headers: @invocation.headers.to_h,
           body: @invocation.input_buffer,
-          attempt_finished_event: @attempt_finished_event
+          attempt_finished_event: @attempt_finished_event,
+          scope: @invocation.scope,
+          limit_key: @invocation.limit_key,
+          idempotency_key: @invocation.idempotency_key
         )
       end
 
@@ -735,6 +776,76 @@ module Restate
             end
           end
         end
+      end
+    end
+
+    # A context for making RPC calls within a specific scope.
+    #
+    # NOTE: This API is in preview and is not enabled by default. See
+    # {Restate::Context#scope} for how to enable it and for the full semantics.
+    #
+    # Returned by +ctx.scope(scope)+: calls and sends made through this context
+    # carry the captured scope, and each method additionally accepts an optional
+    # +limit_key+.
+    #
+    # The limit key enforces hierarchical concurrency limits on invocations sharing
+    # the same scope. It can have one or two levels separated by +/+ (e.g. +"tenant1"+
+    # or +"tenant1/user42"+). Each level must consist only of +[a-zA-Z0-9_.-]+
+    # characters, 1 <= length <= 36.
+    #
+    # The limit key is *not* part of the request identity: two calls to the same
+    # target with the same scope and object key but different limit keys refer to the
+    # *same* resource instance. The limit key only affects concurrency limits.
+    class ScopedContext
+      def initialize(ctx, scope)
+        @ctx = ctx
+        @scope = scope
+      end
+
+      # Durably calls a handler on a Restate service, within this scope.
+      def service_call(service, handler, arg, key: nil, limit_key: nil, idempotency_key: nil,
+                       headers: nil, input_serde: NOT_SET, output_serde: NOT_SET)
+        @ctx.service_call(service, handler, arg, key: key, idempotency_key: idempotency_key,
+                          headers: headers, input_serde: input_serde, output_serde: output_serde,
+                          scope: @scope, limit_key: limit_key)
+      end
+
+      # Fire-and-forget send to a Restate service handler, within this scope.
+      def service_send(service, handler, arg, key: nil, delay: nil, limit_key: nil,
+                       idempotency_key: nil, headers: nil, input_serde: NOT_SET)
+        @ctx.service_send(service, handler, arg, key: key, delay: delay,
+                          idempotency_key: idempotency_key, headers: headers,
+                          input_serde: input_serde, scope: @scope, limit_key: limit_key)
+      end
+
+      # Durably calls a handler on a Restate virtual object, within this scope.
+      def object_call(service, handler, key, arg, limit_key: nil, idempotency_key: nil,
+                      headers: nil, input_serde: NOT_SET, output_serde: NOT_SET)
+        @ctx.object_call(service, handler, key, arg, idempotency_key: idempotency_key,
+                         headers: headers, input_serde: input_serde, output_serde: output_serde,
+                         scope: @scope, limit_key: limit_key)
+      end
+
+      # Fire-and-forget send to a Restate virtual object handler, within this scope.
+      def object_send(service, handler, key, arg, delay: nil, limit_key: nil,
+                      idempotency_key: nil, headers: nil, input_serde: NOT_SET)
+        @ctx.object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key,
+                         headers: headers, input_serde: input_serde, scope: @scope, limit_key: limit_key)
+      end
+
+      # Durably calls a handler on a Restate workflow, within this scope.
+      def workflow_call(service, handler, key, arg, limit_key: nil, idempotency_key: nil,
+                        headers: nil, input_serde: NOT_SET, output_serde: NOT_SET)
+        @ctx.workflow_call(service, handler, key, arg, idempotency_key: idempotency_key,
+                           headers: headers, input_serde: input_serde, output_serde: output_serde,
+                           scope: @scope, limit_key: limit_key)
+      end
+
+      # Fire-and-forget send to a Restate workflow handler, within this scope.
+      def workflow_send(service, handler, key, arg, delay: nil, limit_key: nil,
+                        idempotency_key: nil, headers: nil, input_serde: NOT_SET)
+        @ctx.workflow_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key,
+                           headers: headers, input_serde: input_serde, scope: @scope, limit_key: limit_key)
       end
     end
   end

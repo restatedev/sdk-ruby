@@ -63,7 +63,14 @@ module Restate
   #   @return [String] raw input bytes
   # @!attribute [r] attempt_finished_event
   #   @return [AttemptFinishedEvent] signaled when this attempt ends
-  Request = Struct.new(:id, :headers, :body, :attempt_finished_event, keyword_init: true)
+  # @!attribute [r] scope
+  #   @return [String, nil] the scope this invocation was routed within, if any
+  # @!attribute [r] limit_key
+  #   @return [String, nil] the concurrency limit key this invocation was made with, if any
+  # @!attribute [r] idempotency_key
+  #   @return [String, nil] the idempotency key this invocation was made with, if any
+  Request = Struct.new(:id, :headers, :body, :attempt_finished_event,
+                       :scope, :limit_key, :idempotency_key, keyword_init: true)
 
   # Base context interface for all Restate handlers.
   #
@@ -120,10 +127,37 @@ module Restate
     end
 
     # Durably call a handler using raw bytes (no serialization).
-    def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil); end
+    def generic_call(service, handler, arg, key: nil, idempotency_key: nil, headers: nil,
+                     scope: nil, limit_key: nil)
+    end
 
     # Fire-and-forget send using raw bytes (no serialization).
-    def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil); end
+    def generic_send(service, handler, arg, key: nil, delay: nil, idempotency_key: nil, headers: nil,
+                     scope: nil, limit_key: nil)
+    end
+
+    # Returns a +ScopedContext+ that routes all outgoing calls within the given scope.
+    #
+    # NOTE: This API is in preview and is not enabled by default. To use it in
+    # restate-server 1.7, enable the flow control and protocol v7 experimental
+    # features via +RESTATE_EXPERIMENTAL_ENABLE_PROTOCOL_V7=true+ and
+    # +RESTATE_EXPERIMENTAL_ENABLE_VQUEUES=true+. These can be enabled only on new
+    # clusters. If they aren't enabled, the call fails with a retryable error and
+    # keeps retrying until they are.
+    #
+    # A scope is a sub-grouping of resources (invocations, workflow instances,
+    # concurrency limits) within the Restate cluster. It becomes part of the target
+    # identity tuple and contributes to the partition key, so all resources in a
+    # scope get co-located by the restate-server. Omitting the scope (i.e. using the
+    # regular +service_call+ / +workflow_call+ methods) is equivalent to calling
+    # with no scope, which is the existing behavior.
+    #
+    # The scope must consist only of +[a-zA-Z0-9_.-]+ characters, 1 <= length <= 36.
+    #
+    # @param scope [String] the scope identifier
+    # @return [ScopedContext]
+    # @see https://docs.restate.dev/services/flow-control
+    def scope(scope); end
 
     # Create an awakeable for external callbacks.
     # Returns [awakeable_id, DurableFuture].
