@@ -328,9 +328,12 @@ module Restate
       # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def workflow_call(service, handler, key, arg, idempotency_key: nil, headers: nil,
                         input_serde: NOT_SET, output_serde: NOT_SET, scope: nil, limit_key: nil)
-        object_call(service, handler, key, arg, idempotency_key: idempotency_key, headers: headers,
-                    input_serde: input_serde, output_serde: output_serde, # rubocop:disable Layout/HashAlignment
-                    scope: scope, limit_key: limit_key)
+        object_call(
+          service, handler, key, arg,
+          idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, output_serde: output_serde,
+          scope: scope, limit_key: limit_key
+        )
       end
 
       # Sends a one-way invocation to a Restate workflow handler (fire-and-forget).
@@ -339,8 +342,11 @@ module Restate
       # (via +ctx.scope(...)+); prefer that API over passing them directly.
       def workflow_send(service, handler, key, arg, delay: nil, idempotency_key: nil, headers: nil,
                         input_serde: NOT_SET, scope: nil, limit_key: nil)
-        object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key, headers: headers,
-                    input_serde: input_serde, scope: scope, limit_key: limit_key) # rubocop:disable Layout/HashAlignment
+        object_send(
+          service, handler, key, arg,
+          delay: delay, idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, scope: scope, limit_key: limit_key
+        )
       end
 
       # ── Awakeables ──
@@ -805,47 +811,64 @@ module Restate
       # Durably calls a handler on a Restate service, within this scope.
       def service_call(service, handler, arg, key: nil, limit_key: nil, idempotency_key: nil,
                        headers: nil, input_serde: NOT_SET, output_serde: NOT_SET)
-        @ctx.service_call(service, handler, arg, key: key, idempotency_key: idempotency_key,
-                          headers: headers, input_serde: input_serde, output_serde: output_serde,
-                          scope: @scope, limit_key: limit_key)
+        @ctx.service_call(
+          service, handler, arg,
+          key: key, idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, output_serde: output_serde,
+          scope: @scope, limit_key: limit_key
+        )
       end
 
       # Fire-and-forget send to a Restate service handler, within this scope.
       def service_send(service, handler, arg, key: nil, delay: nil, limit_key: nil,
                        idempotency_key: nil, headers: nil, input_serde: NOT_SET)
-        @ctx.service_send(service, handler, arg, key: key, delay: delay,
-                          idempotency_key: idempotency_key, headers: headers,
-                          input_serde: input_serde, scope: @scope, limit_key: limit_key)
+        @ctx.service_send(
+          service, handler, arg,
+          key: key, delay: delay, idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, scope: @scope, limit_key: limit_key
+        )
       end
 
       # Durably calls a handler on a Restate virtual object, within this scope.
       def object_call(service, handler, key, arg, limit_key: nil, idempotency_key: nil,
                       headers: nil, input_serde: NOT_SET, output_serde: NOT_SET)
-        @ctx.object_call(service, handler, key, arg, idempotency_key: idempotency_key,
-                         headers: headers, input_serde: input_serde, output_serde: output_serde,
-                         scope: @scope, limit_key: limit_key)
+        @ctx.object_call(
+          service, handler, key, arg,
+          idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, output_serde: output_serde,
+          scope: @scope, limit_key: limit_key
+        )
       end
 
       # Fire-and-forget send to a Restate virtual object handler, within this scope.
       def object_send(service, handler, key, arg, delay: nil, limit_key: nil,
                       idempotency_key: nil, headers: nil, input_serde: NOT_SET)
-        @ctx.object_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key,
-                         headers: headers, input_serde: input_serde, scope: @scope, limit_key: limit_key)
+        @ctx.object_send(
+          service, handler, key, arg,
+          delay: delay, idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, scope: @scope, limit_key: limit_key
+        )
       end
 
       # Durably calls a handler on a Restate workflow, within this scope.
       def workflow_call(service, handler, key, arg, limit_key: nil, idempotency_key: nil,
                         headers: nil, input_serde: NOT_SET, output_serde: NOT_SET)
-        @ctx.workflow_call(service, handler, key, arg, idempotency_key: idempotency_key,
-                           headers: headers, input_serde: input_serde, output_serde: output_serde,
-                           scope: @scope, limit_key: limit_key)
+        @ctx.workflow_call(
+          service, handler, key, arg,
+          idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, output_serde: output_serde,
+          scope: @scope, limit_key: limit_key
+        )
       end
 
       # Fire-and-forget send to a Restate workflow handler, within this scope.
       def workflow_send(service, handler, key, arg, delay: nil, limit_key: nil,
                         idempotency_key: nil, headers: nil, input_serde: NOT_SET)
-        @ctx.workflow_send(service, handler, key, arg, delay: delay, idempotency_key: idempotency_key,
-                           headers: headers, input_serde: input_serde, scope: @scope, limit_key: limit_key)
+        @ctx.workflow_send(
+          service, handler, key, arg,
+          delay: delay, idempotency_key: idempotency_key, headers: headers,
+          input_serde: input_serde, scope: @scope, limit_key: limit_key
+        )
       end
     end
   end
