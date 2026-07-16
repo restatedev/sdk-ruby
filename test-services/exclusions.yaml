@@ -1,8 +1,1 @@
-exclusions:
-  "alwaysSuspending": []
-  "default": []
-  "lazyState": []
-  "persistedTimers": []
-  "singleThreadSinglePartition": []
-  "threeNodes": []
-  "threeNodesAlwaysSuspending": []
+exclusions: {}
