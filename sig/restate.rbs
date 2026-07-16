@@ -35,8 +35,9 @@ module Restate
   def self.object_send: (untyped service, (String | Symbol) handler, String key, untyped arg, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
   def self.workflow_call: (untyped service, (String | Symbol) handler, String key, untyped arg, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
   def self.workflow_send: (untyped service, (String | Symbol) handler, String key, untyped arg, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
-  def self.generic_call: (String service, String handler, String arg, ?key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?) -> DurableCallFuture
-  def self.generic_send: (String service, String handler, String arg, ?key: String?, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?) -> SendHandle
+  def self.generic_call: (String service, String handler, String arg, ?key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?scope: String?, ?limit_key: String?) -> DurableCallFuture
+  def self.generic_send: (String service, String handler, String arg, ?key: String?, ?delay: Numeric?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?scope: String?, ?limit_key: String?) -> SendHandle
+  def self.scope: (String scope) -> Server::ScopedContext
 
   # ── Awakeables ──
 
@@ -197,11 +198,11 @@ module Restate
   # ── Service proxies ──
 
   class ServiceCallProxy
-    def initialize: (untyped service_class, ?key: String?, ?call_method: Symbol) -> void
+    def initialize: (untyped service_class, ?key: String?, ?call_method: Symbol, ?scope: String?, ?limit_key: String?) -> void
   end
 
   class ServiceSendProxy
-    def initialize: (untyped service_class, ?key: String?, ?send_method: Symbol, ?delay: Numeric?) -> void
+    def initialize: (untyped service_class, ?key: String?, ?send_method: Symbol, ?delay: Numeric?, ?scope: String?, ?limit_key: String?) -> void
   end
 
   # ── Service classes (declared but not checked — heavy metaprogramming) ──
@@ -224,6 +225,16 @@ module Restate
     end
 
     class Context
+    end
+
+    class ScopedContext
+      def initialize: (untyped ctx, String scope) -> void
+      def service_call: (untyped service, (String | Symbol) handler, untyped arg, ?key: String?, ?limit_key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
+      def service_send: (untyped service, (String | Symbol) handler, untyped arg, ?key: String?, ?delay: Numeric?, ?limit_key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
+      def object_call: (untyped service, (String | Symbol) handler, String key, untyped arg, ?limit_key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
+      def object_send: (untyped service, (String | Symbol) handler, String key, untyped arg, ?delay: Numeric?, ?limit_key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
+      def workflow_call: (untyped service, (String | Symbol) handler, String key, untyped arg, ?limit_key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped, ?output_serde: untyped) -> DurableCallFuture
+      def workflow_send: (untyped service, (String | Symbol) handler, String key, untyped arg, ?delay: Numeric?, ?limit_key: String?, ?idempotency_key: String?, ?headers: Hash[String, String]?, ?input_serde: untyped) -> SendHandle
     end
   end
 

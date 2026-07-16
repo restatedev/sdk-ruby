@@ -18,7 +18,8 @@ end
 
 module Restate
   # Ruby-side data types for VM results
-  Invocation = Struct.new(:invocation_id, :random_seed, :headers, :input_buffer, :key, keyword_init: true)
+  Invocation = Struct.new(:invocation_id, :random_seed, :headers, :input_buffer, :key,
+                          :scope, :limit_key, :idempotency_key, keyword_init: true)
   Failure = Struct.new(:code, :message, :stacktrace, :metadata, keyword_init: true)
 
   class NotReady; end
@@ -116,7 +117,10 @@ module Restate
         random_seed: inp.random_seed,
         headers: headers,
         input_buffer: inp.input.b,
-        key: inp.key
+        key: inp.key,
+        scope: inp.scope,
+        limit_key: inp.limit_key,
+        idempotency_key: inp.idempotency_key
       )
     end
 
@@ -145,16 +149,19 @@ module Restate
       @vm.sys_sleep(millis, name)
     end
 
-    def sys_call(service:, handler:, parameter:, key: nil, idempotency_key: nil, headers: nil)
-      # Rust side expects 6 args: (service, handler, buffer, key_or_nil, idem_key_or_nil, headers_or_nil)
+    def sys_call(service:, handler:, parameter:, key: nil, idempotency_key: nil, headers: nil,
+                 scope: nil, limit_key: nil)
+      # Rust side expects 8 args:
+      # (service, handler, buffer, key_or_nil, idem_key_or_nil, headers_or_nil, scope_or_nil, limit_key_or_nil)
       hdr_array = headers&.map { |k, v| [k, v] }
-      @vm.sys_call(service, handler, parameter, key, idempotency_key, hdr_array)
+      @vm.sys_call(service, handler, parameter, key, idempotency_key, hdr_array, scope, limit_key)
     end
 
-    def sys_send(service:, handler:, parameter:, key: nil, delay: nil, idempotency_key: nil, headers: nil)
-      # Rust side expects 7 args
+    def sys_send(service:, handler:, parameter:, key: nil, delay: nil, idempotency_key: nil, headers: nil,
+                 scope: nil, limit_key: nil)
+      # Rust side expects 9 args
       hdr_array = headers&.map { |k, v| [k, v] }
-      @vm.sys_send(service, handler, parameter, key, delay, idempotency_key, hdr_array)
+      @vm.sys_send(service, handler, parameter, key, delay, idempotency_key, hdr_array, scope, limit_key)
     end
 
     def sys_run(name)

@@ -33,10 +33,13 @@ module Restate
     #
     # @example
     #   Greeter.call.greet("World").await
+    #   Greeter.call(scope: "tenant1", limit_key: "tenant1/user42").greet("World").await
     #
+    # @param scope [String, nil] optional scope to route the call within (see {Restate.scope})
+    # @param limit_key [String, nil] optional concurrency limit key within the scope
     # @return [ServiceCallProxy]
-    def self.call
-      ServiceCallProxy.new(self, call_method: :service_call)
+    def self.call(scope: nil, limit_key: nil)
+      ServiceCallProxy.new(self, call_method: :service_call, scope: scope, limit_key: limit_key)
     end
 
     # Returns a send proxy for fluent fire-and-forget sends to this service.
@@ -44,11 +47,14 @@ module Restate
     # @example
     #   Greeter.send!.greet("World")
     #   Greeter.send!(delay: 60).greet("World")
+    #   Greeter.send!(scope: "tenant1", limit_key: "tenant1/user42").greet("World")
     #
     # @param delay [Numeric, nil] optional delay in seconds
+    # @param scope [String, nil] optional scope to route the send within (see {Restate.scope})
+    # @param limit_key [String, nil] optional concurrency limit key within the scope
     # @return [ServiceSendProxy]
-    def self.send!(delay: nil)
-      ServiceSendProxy.new(self, send_method: :service_send, delay: delay)
+    def self.send!(delay: nil, scope: nil, limit_key: nil)
+      ServiceSendProxy.new(self, send_method: :service_send, delay: delay, scope: scope, limit_key: limit_key)
     end
 
     def self._service_kind

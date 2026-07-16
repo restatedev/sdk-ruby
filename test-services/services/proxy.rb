@@ -6,7 +6,8 @@ class Proxy < Restate::Service
   handler def call(req)
     result = Restate.generic_call(
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
-      key: req['virtualObjectKey'], idempotency_key: req['idempotencyKey']
+      key: req['virtualObjectKey'], idempotency_key: req['idempotencyKey'],
+      scope: req['scope'], limit_key: req['limitKey']
     ).await
     result.bytes
   end
@@ -15,7 +16,8 @@ class Proxy < Restate::Service
     delay_seconds = req['delayMillis'] ? req['delayMillis'] / 1000.0 : nil
     handle = Restate.generic_send(
       req['serviceName'], req['handlerName'], req['message'].pack('C*'),
-      key: req['virtualObjectKey'], delay: delay_seconds, idempotency_key: req['idempotencyKey']
+      key: req['virtualObjectKey'], delay: delay_seconds, idempotency_key: req['idempotencyKey'],
+      scope: req['scope'], limit_key: req['limitKey']
     )
     handle.invocation_id
   end
@@ -26,12 +28,14 @@ class Proxy < Restate::Service
       pr = req['proxyRequest']
       if req['oneWay']
         Restate.generic_send(pr['serviceName'], pr['handlerName'], pr['message'].pack('C*'),
-                             key: pr['virtualObjectKey'], idempotency_key: pr['idempotencyKey'])
+                             key: pr['virtualObjectKey'], idempotency_key: pr['idempotencyKey'],
+                             scope: pr['scope'], limit_key: pr['limitKey'])
       else
         future = Restate.generic_call(pr['serviceName'], pr['handlerName'],
                                       pr['message'].pack('C*'),
                                       key: pr['virtualObjectKey'],
-                                      idempotency_key: pr['idempotencyKey'])
+                                      idempotency_key: pr['idempotencyKey'],
+                                      scope: pr['scope'], limit_key: pr['limitKey'])
         to_await << future if req['awaitAtTheEnd']
       end
     end

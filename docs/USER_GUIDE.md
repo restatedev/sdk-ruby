@@ -399,6 +399,60 @@ Restate.service_call(
 | `input_serde:` | yes | yes | Override input serializer |
 | `output_serde:` | yes | — | Override output serializer |
 
+### Scoped Calls & Concurrency Limits
+
+> **Preview.** This API is not enabled by default. On restate-server 1.7 it requires the
+> experimental protocol v7 + vqueues features (`RESTATE_EXPERIMENTAL_ENABLE_PROTOCOL_V7=true`
+> and `RESTATE_EXPERIMENTAL_ENABLE_VQUEUES=true`), and scoped virtual objects additionally
+> require `RESTATE_EXPERIMENTAL_ENABLE_SCOPED_VIRTUAL_OBJECTS=true`. If the features aren't
+> enabled the call fails with a retryable error and keeps retrying until they are.
+> See [Flow control](https://docs.restate.dev/services/flow-control).
+
+Route a call within a *scope* so Restate applies the concurrency / rate-limit rules configured for
+that scope. A typical use is rate-limiting a third-party API per user-provided API key. Both the
+fluent and explicit call APIs support it.
+
+```ruby
+# Fluent (recommended): scope: / limit_key: on .call / .send!
+AmazonMerchantService.call(scope: api_key).checkout(order).await
+Counter.call('my-key', scope: 'tenant1', limit_key: 'tenant1/user42').add(5).await
+Worker.send!(scope: 'tenant1', delay: 60).process(task)          # fire-and-forget
+
+# Explicit: Restate.scope(scope) returns a ScopedContext
+Restate.scope(api_key).service_call(AmazonMerchantService, :checkout, order).await
+```
+
+A **scope** is a sub-grouping of resources (invocations, workflow instances, concurrency limits).
+It becomes part of the target identity and contributes to the partition key, so resources in a scope
+are co-located. Omitting the scope (the regular `Worker.call.…` / `Restate.service_call` methods) is
+equivalent to calling with no scope — the existing behavior. A scope must match `[a-zA-Z0-9_.-]`,
+1–36 characters.
+
+The optional **`limit_key:`** is a hierarchical concurrency limit key with one or two `/`-separated
+levels (e.g. `"tenant1"` or `"tenant1/user42"`), each level matching `[a-zA-Z0-9_.-]`, 1–36
+characters. The limit key is **not** part of the request identity — two calls to the same target with
+the same scope and key but different limit keys refer to the *same* resource instance; the limit key
+only affects concurrency limits.
+
+`Restate.scope(scope)` (or `ctx.scope(scope)`) returns a **`ScopedContext`** that mirrors the regular
+explicit call surface — `service_call` / `service_send`, `object_call` / `object_send`,
+`workflow_call` / `workflow_send`, same arguments as their `Restate.*` counterparts, plus
+`limit_key:`:
+
+```ruby
+scoped = Restate.scope('tenant1')
+scoped.service_call(Greeter, :greet, 'World', limit_key: 'tenant1/user42').await
+scoped.object_call(Counter, :add, 'my-key', 5, limit_key: 'tenant1').await
+scoped.workflow_send(UserSignup, :run, 'user42', email)          # fire-and-forget
+```
+
+For raw proxying, `Restate.generic_call` / `Restate.generic_send` also accept `scope:` and
+`limit_key:` directly.
+
+The scope and limit key an invocation was made with are readable from `Restate.request` (see
+[Request Metadata](#request-metadata)). A full runnable example lives in
+[`examples/concurrency_limit.rb`](../examples/concurrency_limit.rb).
+
 ### Fan-Out / Fan-In
 
 Launch multiple calls concurrently, then collect all results.
@@ -536,9 +590,12 @@ Restate.reject_promise('approval', 'denied', code: 400)
 
 ```ruby
 request = Restate.request
-request.id         # Invocation ID (String)
-request.headers    # Request headers (Hash)
-request.body       # Raw input bytes (String)
+request.id               # Invocation ID (String)
+request.headers          # Request headers (Hash)
+request.body             # Raw input bytes (String)
+request.scope            # Scope this invocation was routed within (String or nil)
+request.limit_key        # Concurrency limit key it was made with (String or nil)
+request.idempotency_key  # Idempotency key it was made with (String or nil)
 
 key = Restate.key  # Object/workflow key (String)
 ```
@@ -1239,6 +1296,7 @@ The `examples/` directory contains runnable examples:
 | `service_communication.rb` | Fluent call API, fan-out/fan-in, `wait_any`, `or_timeout`, awakeables |
 | `typed_handlers.rb` | `input:`/`output:` with `Dry::Struct`, JSON Schema generation |
 | `service_configuration.rb` | Service-level config: timeouts, retention, retry policy, lazy state |
+| `concurrency_limit.rb` | Scoped calls & flow-control limit keys (`Restate.scope`, `limit_key:`) |
 | `deadlock_detection.rb` | Built-in deadlock detection middleware for VirtualObjects |
 | [`middleware_example/`](../middleware_example/) | Real OpenTelemetry tracing + tenant isolation middleware (self-contained) |
 
@@ -1361,6 +1419,15 @@ Restate.service_send(svc, handler, arg, delay: nil) -> SendHandle
 Restate.object_send(svc, handler, key, arg, delay: nil) -> SendHandle
 Restate.workflow_send(svc, handler, key, arg, delay: nil) -> SendHandle
 
+# Scoped calls & concurrency limits (preview)
+Restate.scope(scope) -> ScopedContext
+  scoped.service_call(svc, handler, arg, limit_key: nil) -> DurableCallFuture
+  scoped.object_call(svc, handler, key, arg, limit_key: nil) -> DurableCallFuture
+  scoped.workflow_call(svc, handler, key, arg, limit_key: nil) -> DurableCallFuture
+  scoped.service_send / object_send / workflow_send (…, limit_key: nil) -> SendHandle
+Restate.generic_call(svc, handler, arg, scope: nil, limit_key: nil) -> DurableCallFuture
+Restate.generic_send(svc, handler, arg, scope: nil, limit_key: nil) -> SendHandle
+
 # Awakeables
 Restate.awakeable -> [id, DurableFuture]
 Restate.resolve_awakeable(id, payload)
@@ -1380,7 +1447,7 @@ Restate.all_settled(*futures) -> CombinedFuture (awaits to Array of outcome Hash
 Restate.wait_any(*futures)    -> [completed, remaining]   # eager, not a future
 
 # Metadata
-Restate.request -> Request{id, headers, body}
+Restate.request -> Request{id, headers, body, scope, limit_key, idempotency_key}
 Restate.request.attempt_finished_event -> AttemptFinishedEvent
 Restate.key -> String
 

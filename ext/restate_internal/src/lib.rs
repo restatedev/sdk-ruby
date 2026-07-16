@@ -215,6 +215,9 @@ struct RbInput {
     key: String,
     headers: Vec<RbHeader>,
     input: Vec<u8>,
+    scope: Option<String>,
+    limit_key: Option<String>,
+    idempotency_key: Option<String>,
 }
 
 impl RbInput {
@@ -226,6 +229,15 @@ impl RbInput {
     }
     fn key(&self) -> &str {
         &self.key
+    }
+    fn scope(&self) -> Option<&str> {
+        self.scope.as_deref()
+    }
+    fn limit_key(&self) -> Option<&str> {
+        self.limit_key.as_deref()
+    }
+    fn idempotency_key(&self) -> Option<&str> {
+        self.idempotency_key.as_deref()
     }
     fn headers_array(&self) -> Result<RArray, Error> {
         let ruby = Ruby::get().map_err(|_| Error::new(vm_error_class(), "Ruby not available"))?;
@@ -249,6 +261,9 @@ impl From<Input> for RbInput {
             key: i.key,
             headers: i.headers.into_iter().map(Into::into).collect(),
             input: i.input.into(),
+            scope: i.scope,
+            limit_key: i.limit_key,
+            idempotency_key: i.idempotency_key,
         }
     }
 }
@@ -584,7 +599,9 @@ impl RbVM {
             .map_err(core_error_to_magnus)
     }
 
-    // sys_call(service, handler, buffer, key_or_nil, idempotency_key_or_nil, headers_or_nil)
+    // sys_call(service, handler, buffer, key_or_nil, idempotency_key_or_nil, headers_or_nil,
+    //          scope_or_nil, limit_key_or_nil)
+    #[allow(clippy::too_many_arguments)]
     fn sys_call(
         &self,
         service: String,
@@ -593,6 +610,8 @@ impl RbVM {
         key: Value,
         idempotency_key: Value,
         headers: Value,
+        scope: Value,
+        limit_key: Value,
     ) -> Result<RbCallHandle, Error> {
         let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
         let key_opt: Option<String> = if key.is_nil() {
@@ -610,6 +629,16 @@ impl RbVM {
         } else {
             parse_headers_array(RArray::try_convert(headers)?)?
         };
+        let scope_opt: Option<String> = if scope.is_nil() {
+            None
+        } else {
+            Some(String::try_convert(scope)?)
+        };
+        let limit_key_opt: Option<String> = if limit_key.is_nil() {
+            None
+        } else {
+            Some(String::try_convert(limit_key)?)
+        };
         self.vm
             .borrow_mut()
             .sys_call(
@@ -618,8 +647,8 @@ impl RbVM {
                     handler,
                     key: key_opt,
                     idempotency_key: idem_opt,
-                    scope: None,
-                    limit_key: None,
+                    scope: scope_opt,
+                    limit_key: limit_key_opt,
                     headers: hdr_vec,
                 },
                 bytes.into(),
@@ -630,7 +659,9 @@ impl RbVM {
             .map_err(core_error_to_magnus)
     }
 
-    // sys_send(service, handler, buffer, key_or_nil, delay_or_nil, idempotency_key_or_nil, headers_or_nil)
+    // sys_send(service, handler, buffer, key_or_nil, delay_or_nil, idempotency_key_or_nil,
+    //          headers_or_nil, scope_or_nil, limit_key_or_nil)
+    #[allow(clippy::too_many_arguments)]
     fn sys_send(
         &self,
         service: String,
@@ -640,6 +671,8 @@ impl RbVM {
         delay: Value,
         idempotency_key: Value,
         headers: Value,
+        scope: Value,
+        limit_key: Value,
     ) -> Result<u32, Error> {
         let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
         let key_opt: Option<String> = if key.is_nil() {
@@ -662,6 +695,16 @@ impl RbVM {
         } else {
             parse_headers_array(RArray::try_convert(headers)?)?
         };
+        let scope_opt: Option<String> = if scope.is_nil() {
+            None
+        } else {
+            Some(String::try_convert(scope)?)
+        };
+        let limit_key_opt: Option<String> = if limit_key.is_nil() {
+            None
+        } else {
+            Some(String::try_convert(limit_key)?)
+        };
         self.vm
             .borrow_mut()
             .sys_send(
@@ -670,8 +713,8 @@ impl RbVM {
                     handler,
                     key: key_opt,
                     idempotency_key: idem_opt,
-                    scope: None,
-                    limit_key: None,
+                    scope: scope_opt,
+                    limit_key: limit_key_opt,
                     headers: hdr_vec,
                 },
                 bytes.into(),
@@ -1135,6 +1178,9 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     input_class.define_method("invocation_id", method!(RbInput::invocation_id, 0))?;
     input_class.define_method("random_seed", method!(RbInput::random_seed, 0))?;
     input_class.define_method("key", method!(RbInput::key, 0))?;
+    input_class.define_method("scope", method!(RbInput::scope, 0))?;
+    input_class.define_method("limit_key", method!(RbInput::limit_key, 0))?;
+    input_class.define_method("idempotency_key", method!(RbInput::idempotency_key, 0))?;
     input_class.define_method("headers", method!(RbInput::headers_array, 0))?;
     input_class.define_method("input", method!(RbInput::input_bytes, 0))?;
 
@@ -1189,8 +1235,8 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     vm_class.define_method("sys_clear_state", method!(RbVM::sys_clear_state, 1))?;
     vm_class.define_method("sys_clear_all_state", method!(RbVM::sys_clear_all_state, 0))?;
     vm_class.define_method("sys_sleep", method!(RbVM::sys_sleep, 2))?;
-    vm_class.define_method("sys_call", method!(RbVM::sys_call, 6))?;
-    vm_class.define_method("sys_send", method!(RbVM::sys_send, 7))?;
+    vm_class.define_method("sys_call", method!(RbVM::sys_call, 8))?;
+    vm_class.define_method("sys_send", method!(RbVM::sys_send, 9))?;
     vm_class.define_method("sys_run", method!(RbVM::sys_run, 1))?;
     vm_class.define_method(
         "propose_run_completion_success",

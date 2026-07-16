@@ -36,12 +36,6 @@ class TestUtilsService < Restate::Service
     nil
   end
 
-  handler def sleepConcurrently(millis_list) # rubocop:disable Naming/MethodName
-    futures = millis_list.map { |ms| Restate.sleep(ms / 1000.0) }
-    futures.each(&:await)
-    nil
-  end
-
   handler def resolveSignal(req) # rubocop:disable Naming/MethodName
     Restate.resolve_signal(req['invocationId'], req['signalName'], req['value'])
     nil
