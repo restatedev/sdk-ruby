@@ -143,7 +143,10 @@ module Restate
           'RESTATE_WORKER__INVOKER__INACTIVITY_TIMEOUT' => @always_replay ? '0s' : '10m',
           'RESTATE_WORKER__INVOKER__ABORT_TIMEOUT' => '10m'
         }
-        env['RESTATE_WORKER__INVOKER__RETRY_POLICY__TYPE'] = 'none' if @disable_retries
+        if @disable_retries
+          env['RESTATE_DEFAULT_RETRY_POLICY__MAX_ATTEMPTS'] = '1'
+          env['RESTATE_DEFAULT_RETRY_POLICY__ON_MAX_ATTEMPTS'] = 'kill'
+        end
 
         @container = RestateContainer.new(@restate_image)
         @container.with_exposed_ports(8080, 9070)
