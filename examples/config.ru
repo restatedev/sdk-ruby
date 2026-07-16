@@ -15,6 +15,7 @@ require_relative 'workflow'
 require_relative 'service_communication'
 require_relative 'typed_handlers'
 require_relative 'service_configuration'
+require_relative 'concurrency_limit'
 
 endpoint = Restate.endpoint(
   Greeter,
@@ -23,7 +24,8 @@ endpoint = Restate.endpoint(
   UserSignup,
   Worker, FanOut,
   TicketService,
-  OrderProcessor
+  OrderProcessor,
+  AmazonMerchantService, OrderFulfillment
 )
 
 run endpoint.app
