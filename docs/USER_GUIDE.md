@@ -408,42 +408,46 @@ Restate.service_call(
 > enabled the call fails with a retryable error and keeps retrying until they are.
 > See [Flow control](https://docs.restate.dev/services/flow-control).
 
-`Restate.scope(scope)` (or `ctx.scope(scope)`) returns a **`ScopedContext`** — all calls made
-through it carry the given scope, and Restate applies any concurrency / rate-limit rules configured
-for that scope. A typical use is rate-limiting a third-party API per user-provided API key.
+Route a call within a *scope* so Restate applies the concurrency / rate-limit rules configured for
+that scope. A typical use is rate-limiting a third-party API per user-provided API key. Both the
+fluent and explicit call APIs support it.
 
 ```ruby
-# Route the call within a scope; Restate enforces the scope's rate-limit rules.
-response = Restate.scope(api_key).service_call(
-  AmazonMerchantService, :checkout, { 'orderId' => order_id }
-).await
+# Fluent (recommended): scope: / limit_key: on .call / .send!
+AmazonMerchantService.call(scope: api_key).checkout(order).await
+Counter.call('my-key', scope: 'tenant1', limit_key: 'tenant1/user42').add(5).await
+Worker.send!(scope: 'tenant1', delay: 60).process(task)          # fire-and-forget
+
+# Explicit: Restate.scope(scope) returns a ScopedContext
+Restate.scope(api_key).service_call(AmazonMerchantService, :checkout, order).await
 ```
 
 A **scope** is a sub-grouping of resources (invocations, workflow instances, concurrency limits).
 It becomes part of the target identity and contributes to the partition key, so resources in a scope
-are co-located. Omitting the scope (the regular `Restate.service_call` / `Worker.call.…` methods) is
+are co-located. Omitting the scope (the regular `Worker.call.…` / `Restate.service_call` methods) is
 equivalent to calling with no scope — the existing behavior. A scope must match `[a-zA-Z0-9_.-]`,
 1–36 characters.
 
-Every `ScopedContext` call/send additionally accepts an optional **`limit_key:`**, a hierarchical
-concurrency limit key with one or two `/`-separated levels (e.g. `"tenant1"` or `"tenant1/user42"`),
-each level matching `[a-zA-Z0-9_.-]`, 1–36 characters. The limit key is **not** part of the request
-identity — two calls to the same target with the same scope and key but different limit keys refer to
-the *same* resource instance; the limit key only affects concurrency limits.
+The optional **`limit_key:`** is a hierarchical concurrency limit key with one or two `/`-separated
+levels (e.g. `"tenant1"` or `"tenant1/user42"`), each level matching `[a-zA-Z0-9_.-]`, 1–36
+characters. The limit key is **not** part of the request identity — two calls to the same target with
+the same scope and key but different limit keys refer to the *same* resource instance; the limit key
+only affects concurrency limits.
+
+`Restate.scope(scope)` (or `ctx.scope(scope)`) returns a **`ScopedContext`** that mirrors the regular
+explicit call surface — `service_call` / `service_send`, `object_call` / `object_send`,
+`workflow_call` / `workflow_send`, same arguments as their `Restate.*` counterparts, plus
+`limit_key:`:
 
 ```ruby
 scoped = Restate.scope('tenant1')
-
 scoped.service_call(Greeter, :greet, 'World', limit_key: 'tenant1/user42').await
 scoped.object_call(Counter, :add, 'my-key', 5, limit_key: 'tenant1').await
-scoped.workflow_call(UserSignup, :run, 'user42', email).await
-scoped.service_send(Worker, :process, task, delay: 60, limit_key: 'tenant1')  # fire-and-forget
+scoped.workflow_send(UserSignup, :run, 'user42', email)          # fire-and-forget
 ```
 
-`ScopedContext` mirrors the regular call surface: `service_call` / `service_send`, `object_call` /
-`object_send`, `workflow_call` / `workflow_send` — same arguments as their `Restate.*` counterparts,
-plus `limit_key:`. For raw proxying, `Restate.generic_call` / `Restate.generic_send` also accept
-`scope:` and `limit_key:` directly.
+For raw proxying, `Restate.generic_call` / `Restate.generic_send` also accept `scope:` and
+`limit_key:` directly.
 
 The scope and limit key an invocation was made with are readable from `Restate.request` (see
 [Request Metadata](#request-metadata)). A full runnable example lives in

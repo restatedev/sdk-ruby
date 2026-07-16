@@ -198,11 +198,11 @@ module Restate
   # ── Service proxies ──
 
   class ServiceCallProxy
-    def initialize: (untyped service_class, ?key: String?, ?call_method: Symbol) -> void
+    def initialize: (untyped service_class, ?key: String?, ?call_method: Symbol, ?scope: String?, ?limit_key: String?) -> void
   end
 
   class ServiceSendProxy
-    def initialize: (untyped service_class, ?key: String?, ?send_method: Symbol, ?delay: Numeric?) -> void
+    def initialize: (untyped service_class, ?key: String?, ?send_method: Symbol, ?delay: Numeric?, ?scope: String?, ?limit_key: String?) -> void
   end
 
   # ── Service classes (declared but not checked — heavy metaprogramming) ──

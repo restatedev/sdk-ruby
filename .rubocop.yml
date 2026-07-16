@@ -85,6 +85,7 @@ Metrics/ParameterLists:
     - "lib/restate/server/context.rb"
     - "lib/restate/virtual_object.rb"
     - "lib/restate/vm.rb"
+    - "lib/restate/service_proxy.rb"
 
 # The default branch handles the empty accept header case
 Lint/DuplicateBranch:

@@ -14,16 +14,23 @@ module Restate
   #   # Instead of: ctx.object_call(Counter, :add, "key", 5)
   #   Counter.call("key").add(5)
   #
+  #   # Scoped call (preview): route within a scope with an optional limit key
+  #   Greeter.call(scope: "tenant1", limit_key: "tenant1/user42").greet("World")
+  #
   # @!visibility private
   class ServiceCallProxy
-    def initialize(service_class, key: nil, call_method: :service_call)
+    def initialize(service_class, key: nil, call_method: :service_call, scope: nil, limit_key: nil)
       @service_class = service_class
       @key = key
       @call_method = call_method
+      @scope = scope
+      @limit_key = limit_key
     end
 
     def method_missing(handler_name, arg = nil, **opts)
       ctx = Restate.fetch_context!
+      opts[:scope] = @scope unless @scope.nil? || opts.key?(:scope)
+      opts[:limit_key] = @limit_key unless @limit_key.nil? || opts.key?(:limit_key)
       if @key
         ctx.public_send(@call_method, @service_class, handler_name, @key, arg, **opts)
       else
@@ -47,18 +54,25 @@ module Restate
   #   # Instead of: ctx.object_send(Counter, :add, "key", 5, delay: 60)
   #   Counter.send!("key", delay: 60).add(5)
   #
+  #   # Scoped send (preview): route within a scope with an optional limit key
+  #   Greeter.send!(scope: "tenant1", limit_key: "tenant1/user42").greet("World")
+  #
   # @!visibility private
   class ServiceSendProxy
-    def initialize(service_class, key: nil, send_method: :service_send, delay: nil)
+    def initialize(service_class, key: nil, send_method: :service_send, delay: nil, scope: nil, limit_key: nil)
       @service_class = service_class
       @key = key
       @send_method = send_method
       @delay = delay
+      @scope = scope
+      @limit_key = limit_key
     end
 
     def method_missing(handler_name, arg = nil, **opts)
       ctx = Restate.fetch_context!
       opts[:delay] = @delay if @delay
+      opts[:scope] = @scope unless @scope.nil? || opts.key?(:scope)
+      opts[:limit_key] = @limit_key unless @limit_key.nil? || opts.key?(:limit_key)
       if @key
         ctx.public_send(@send_method, @service_class, handler_name, @key, arg, **opts)
       else

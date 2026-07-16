@@ -52,11 +52,14 @@ module Restate
     #
     # @example
     #   Counter.call("my-key").add(5).await
+    #   Counter.call("my-key", scope: "tenant1", limit_key: "tenant1/user42").add(5).await
     #
     # @param key [String] the object key
+    # @param scope [String, nil] optional scope to route the call within (see {Restate.scope})
+    # @param limit_key [String, nil] optional concurrency limit key within the scope
     # @return [ServiceCallProxy]
-    def self.call(key)
-      ServiceCallProxy.new(self, key: key, call_method: :object_call)
+    def self.call(key, scope: nil, limit_key: nil)
+      ServiceCallProxy.new(self, key: key, call_method: :object_call, scope: scope, limit_key: limit_key)
     end
 
     # Returns a send proxy for fluent fire-and-forget sends to this virtual object.
@@ -64,12 +67,15 @@ module Restate
     # @example
     #   Counter.send!("my-key").add(5)
     #   Counter.send!("my-key", delay: 60).add(5)
+    #   Counter.send!("my-key", scope: "tenant1", limit_key: "tenant1/user42").add(5)
     #
     # @param key [String] the object key
     # @param delay [Numeric, nil] optional delay in seconds
+    # @param scope [String, nil] optional scope to route the send within (see {Restate.scope})
+    # @param limit_key [String, nil] optional concurrency limit key within the scope
     # @return [ServiceSendProxy]
-    def self.send!(key, delay: nil)
-      ServiceSendProxy.new(self, key: key, send_method: :object_send, delay: delay)
+    def self.send!(key, delay: nil, scope: nil, limit_key: nil)
+      ServiceSendProxy.new(self, key: key, send_method: :object_send, delay: delay, scope: scope, limit_key: limit_key)
     end
 
     def self._service_kind

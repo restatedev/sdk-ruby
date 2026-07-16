@@ -15,8 +15,7 @@
 # See https://docs.restate.dev/services/flow-control
 #
 # Features:
-#   - Restate.scope(scope)                 — route outgoing calls within a scope
-#   - scoped.service_call(...)             — a call that carries the scope
+#   - Service.call(scope:, limit_key:)     — fluent call routed within a scope
 #   - limit_key:                           — hierarchical concurrency limit key
 #
 # Try it:
@@ -66,8 +65,7 @@ class OrderFulfillment < Restate::Service
   handler def process_order(req)
     # Scope the call by the user's Amazon API key.
     # Restate enforces the rate limit rules configured above.
-    response = Restate.scope(req['amazonApiKey']).service_call(
-      AmazonMerchantService, :checkout,
+    response = AmazonMerchantService.call(scope: req['amazonApiKey']).checkout(
       { 'orderId' => req['orderId'], 'productId' => 'product-42', 'quantity' => 1 }
     ).await
 

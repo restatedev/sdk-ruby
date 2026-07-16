@@ -52,11 +52,14 @@ module Restate
     #
     # @example
     #   UserSignup.call("user42").run("user@example.com").await
+    #   UserSignup.call("user42", scope: "tenant1", limit_key: "tenant1/user42").run(email).await
     #
     # @param key [String] the workflow key
+    # @param scope [String, nil] optional scope to route the call within (see {Restate.scope})
+    # @param limit_key [String, nil] optional concurrency limit key within the scope
     # @return [ServiceCallProxy]
-    def self.call(key)
-      ServiceCallProxy.new(self, key: key, call_method: :workflow_call)
+    def self.call(key, scope: nil, limit_key: nil)
+      ServiceCallProxy.new(self, key: key, call_method: :workflow_call, scope: scope, limit_key: limit_key)
     end
 
     # Returns a send proxy for fluent fire-and-forget sends to this workflow.
@@ -64,12 +67,19 @@ module Restate
     # @example
     #   UserSignup.send!("user42").run("user@example.com")
     #   UserSignup.send!("user42", delay: 60).run("user@example.com")
+    #   UserSignup.send!("user42", scope: "tenant1", limit_key: "tenant1/user42").run(email)
     #
     # @param key [String] the workflow key
     # @param delay [Numeric, nil] optional delay in seconds
+    # @param scope [String, nil] optional scope to route the send within (see {Restate.scope})
+    # @param limit_key [String, nil] optional concurrency limit key within the scope
     # @return [ServiceSendProxy]
-    def self.send!(key, delay: nil)
-      ServiceSendProxy.new(self, key: key, send_method: :workflow_send, delay: delay)
+    def self.send!(key, delay: nil, scope: nil, limit_key: nil)
+      ServiceSendProxy.new(
+        self,
+        key: key, send_method: :workflow_send,
+        delay: delay, scope: scope, limit_key: limit_key
+      )
     end
 
     def self._service_kind
