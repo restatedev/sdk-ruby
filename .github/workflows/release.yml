@@ -38,6 +38,10 @@ jobs:
       - id: fetch
         uses: oxidize-rb/actions/fetch-ci-data@v1.5.0
         with:
+          # fetch-ci-data adds ruby-head near Christmas, which rb-sys-dock can't build
+          stable-ruby-versions: |
+            exclude:
+              - head
           supported-ruby-platforms: |
             exclude:
               - arm-linux
