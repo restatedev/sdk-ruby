@@ -506,6 +506,11 @@ impl RbVM {
                     Ok(ruby.into_value(RbDoWaitForPendingRun))
                 }
             }
+            // Ephemeral state is not exposed by the Ruby SDK, so this is never returned.
+            Ok(AwaitResponse::EphemeralNotificationReady(_)) => Err(Error::new(
+                vm_error_class(),
+                "Unexpected ephemeral notification, this is an SDK bug",
+            )),
         }
     }
 
@@ -543,7 +548,7 @@ impl RbVM {
     fn sys_get_state(&self, key: String) -> Result<u32, Error> {
         self.vm
             .borrow_mut()
-            .sys_state_get(key, Default::default())
+            .sys_state_get(key, None, Default::default())
             .map(Into::into)
             .map_err(core_error_to_magnus)
     }
@@ -551,7 +556,7 @@ impl RbVM {
     fn sys_get_state_keys(&self) -> Result<u32, Error> {
         self.vm
             .borrow_mut()
-            .sys_state_get_keys()
+            .sys_state_get_keys(None)
             .map(Into::into)
             .map_err(core_error_to_magnus)
     }
@@ -560,21 +565,21 @@ impl RbVM {
         let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
         self.vm
             .borrow_mut()
-            .sys_state_set(key, bytes.into(), Default::default())
+            .sys_state_set(key, bytes.into(), None, Default::default())
             .map_err(core_error_to_magnus)
     }
 
     fn sys_clear_state(&self, key: String) -> Result<(), Error> {
         self.vm
             .borrow_mut()
-            .sys_state_clear(key)
+            .sys_state_clear(key, None)
             .map_err(core_error_to_magnus)
     }
 
     fn sys_clear_all_state(&self) -> Result<(), Error> {
         self.vm
             .borrow_mut()
-            .sys_state_clear_all()
+            .sys_state_clear_all(None)
             .map_err(core_error_to_magnus)
     }
 
