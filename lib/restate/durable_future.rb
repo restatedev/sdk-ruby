@@ -17,7 +17,7 @@ module Restate
 
     # Block until the result is available and return it. Caches across calls,
     # including failures — a second await on a failed future re-raises the
-    # same +TerminalError+ rather than re-fetching from the VM (the notification
+    # same error (a +TerminalError+ or a serde failure) rather than re-fetching from the VM (the notification
     # is single-shot).
     #
     # @return [Object] the deserialized result
@@ -51,10 +51,23 @@ module Restate
     private
 
     def resolve!
-      raw = @ctx.resolve_handle(@handle)
-      @value = @serde ? @serde.deserialize(raw) : raw
+      settle do
+        raw = @ctx.resolve_handle(@handle)
+        @serde ? @serde.deserialize(raw) : raw
+      end
+    end
+
+    # Runs the block and records its outcome. A TerminalError is cached and
+    # re-raised on await. Any other failure (e.g. a serde error) is cached too:
+    # the VM notification is single-shot, so leaving the future "resolved" with
+    # no value would make the next await silently return nil.
+    def settle
+      @value = yield
     rescue TerminalError => e
       @error = e
+    rescue StandardError => e
+      @error = e
+      raise
     ensure
       @resolved = true
     end
@@ -84,16 +97,10 @@ module Restate
     private
 
     def resolve_call!
-      raw = @ctx.resolve_handle(@handle)
-      @value = if raw.nil? || @output_serde.nil?
-                 raw
-               else
-                 @output_serde.deserialize(raw)
-               end
-    rescue TerminalError => e
-      @error = e
-    ensure
-      @resolved = true
+      settle do
+        raw = @ctx.resolve_handle(@handle)
+        raw.nil? || @output_serde.nil? ? raw : @output_serde.deserialize(raw)
+      end
     end
 
     public
