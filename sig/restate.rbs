@@ -96,7 +96,13 @@ module Restate
 
   # ── Futures ──
 
+  module Settleable
+    private
+    def settle: () { () -> untyped } -> untyped
+  end
+
   class DurableFuture
+    include Settleable
     attr_reader handle: Integer
     def initialize: (untyped ctx, Integer handle, ?serde: untyped) -> void
     def await: () -> untyped
@@ -117,6 +123,7 @@ module Restate
   end
 
   class CombinedFuture
+    include Settleable
     VALID_VARIANTS: Array[Symbol]
     def initialize: (untyped ctx, Symbol variant, Array[untyped] children) -> void
     def tree: () -> untyped

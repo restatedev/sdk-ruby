@@ -2,9 +2,31 @@
 # frozen_string_literal: true
 
 module Restate
+  # Shared outcome recording for futures that resolve lazily on first +await+.
+  module Settleable
+    private
+
+    # Runs the block and records its outcome. A TerminalError is cached and
+    # re-raised on await. Any other failure (e.g. a serde error) is cached too:
+    # the VM notification is single-shot, so leaving the future "resolved" with
+    # no value would make the next await silently return nil.
+    def settle
+      @value = yield
+    rescue TerminalError => e
+      @error = e
+    rescue StandardError => e
+      @error = e
+      raise
+    ensure
+      @resolved = true
+    end
+  end
+
   # A durable future wrapping a VM handle. Lazily resolves on first +await+ and caches the result.
   # Returned by +ctx.run+ and +ctx.sleep+.
   class DurableFuture
+    include Settleable
+
     attr_reader :handle
 
     def initialize(ctx, handle, serde: nil)
@@ -17,7 +39,7 @@ module Restate
 
     # Block until the result is available and return it. Caches across calls,
     # including failures — a second await on a failed future re-raises the
-    # same +TerminalError+ rather than re-fetching from the VM (the notification
+    # same error (a +TerminalError+ or a serde failure) rather than re-fetching from the VM (the notification
     # is single-shot).
     #
     # @return [Object] the deserialized result
@@ -51,12 +73,10 @@ module Restate
     private
 
     def resolve!
-      raw = @ctx.resolve_handle(@handle)
-      @value = @serde ? @serde.deserialize(raw) : raw
-    rescue TerminalError => e
-      @error = e
-    ensure
-      @resolved = true
+      settle do
+        raw = @ctx.resolve_handle(@handle)
+        @serde ? @serde.deserialize(raw) : raw
+      end
     end
   end
 
@@ -73,7 +93,7 @@ module Restate
     end
 
     # Block until the result is available and return it. Deserializes via +output_serde+.
-    # Caches both successes and TerminalError failures across calls.
+    # Caches both successes and failures (TerminalError or serde errors) across calls.
     def await
       resolve_call! unless @resolved
       raise @error if @error
@@ -84,16 +104,10 @@ module Restate
     private
 
     def resolve_call!
-      raw = @ctx.resolve_handle(@handle)
-      @value = if raw.nil? || @output_serde.nil?
-                 raw
-               else
-                 @output_serde.deserialize(raw)
-               end
-    rescue TerminalError => e
-      @error = e
-    ensure
-      @resolved = true
+      settle do
+        raw = @ctx.resolve_handle(@handle)
+        raw.nil? || @output_serde.nil? ? raw : @output_serde.deserialize(raw)
+      end
     end
 
     public
@@ -128,6 +142,8 @@ module Restate
   #   :first_succeeded_or_all_failed   → JS Promise.any
   #   :all_completed                   → JS Promise.allSettled
   class CombinedFuture
+    include Settleable
+
     VALID_VARIANTS = %i[
       first_completed
       all_succeeded_or_first_failed
@@ -180,12 +196,10 @@ module Restate
     private
 
     def resolve_combined!
-      @ctx.wait_combined(tree)
-      @value = finalize_value
-    rescue TerminalError => e
-      @error = e
-    ensure
-      @resolved = true
+      settle do
+        @ctx.wait_combined(tree)
+        finalize_value
+      end
     end
 
     def finalize_value
