@@ -6,7 +6,7 @@ set -euo pipefail
 # Copies the template/ to a temp directory, installs the gem from RubyGems,
 # starts a real Restate container, invokes the service, and verifies the response.
 #
-# Prerequisites: Docker running, Ruby >= 3.1
+# Prerequisites: Docker running, Ruby >= 3.3
 #
 # Usage:
 #   ./etc/smoke-test.sh                    # test latest released version

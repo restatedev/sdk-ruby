@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.description = 'Build resilient applications with distributed durable async/await using Restate'
   spec.homepage = 'https://github.com/restatedev/sdk-ruby'
   spec.license = 'MIT'
-  spec.required_ruby_version = '>= 3.1'
+  spec.required_ruby_version = '>= 3.3'
 
   spec.files = Dir[
     'lib/**/*.rb',
