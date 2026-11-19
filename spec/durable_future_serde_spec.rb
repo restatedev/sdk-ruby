@@ -39,3 +39,16 @@ RSpec.describe Restate::DurableCallFuture do
     expect { future.await }.to raise_error(ArgumentError, 'bad payload')
   end
 end
+
+RSpec.describe Restate::CombinedFuture do
+  it 'keeps raising when a child fails to deserialize on every await' do
+    ctx = double('ctx', resolve_handle: 'raw', wait_combined: nil, completed?: true)
+    serde = double('serde')
+    allow(serde).to receive(:deserialize).and_raise(ArgumentError, 'bad payload')
+    child = Restate::DurableFuture.new(ctx, 1, serde: serde)
+    future = described_class.new(ctx, :all_completed, [child])
+
+    expect { future.await }.to raise_error(ArgumentError, 'bad payload')
+    expect { future.await }.to raise_error(ArgumentError, 'bad payload')
+  end
+end
