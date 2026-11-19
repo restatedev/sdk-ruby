@@ -14,7 +14,7 @@ test: compile
 test-harness: compile
 	bundle exec rspec spec/harness_spec.rb
 
-# Run sdk-test-suite integration tests (requires Docker + Java 21+)
+# Run sdk-test-suite integration tests (requires Docker)
 test-integration: compile
 	./etc/run-integration-tests.sh
 

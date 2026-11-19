@@ -25,6 +25,9 @@ Gem::Specification.new do |spec|
   spec.extensions = ['ext/restate_internal/extconf.rb']
 
   spec.add_dependency 'async', '~> 2.0'
+  # No longer default gems: base64 since Ruby 3.4, logger since Ruby 4.0
+  spec.add_dependency 'base64'
+  spec.add_dependency 'logger'
   spec.add_dependency 'rack', '>= 2.0'
   spec.metadata['rubygems_mfa_required'] = 'true'
 end

@@ -11,9 +11,9 @@ set -euo pipefail
 #   ./etc/run-integration-tests.sh --skip-build # run tests only (reuse existing image)
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SDK_TEST_SUITE_VERSION="v2.1"
+SDK_TEST_SUITE_VERSION="v2.3"
 JAR_URL="https://github.com/restatedev/e2e/releases/download/${SDK_TEST_SUITE_VERSION}/sdk-tests.jar"
-JAR_PATH="${REPO_ROOT}/tmp/sdk-tests.jar"
+JAR_PATH="${REPO_ROOT}/tmp/sdk-tests-${SDK_TEST_SUITE_VERSION}.jar"
 SERVICE_IMAGE="restatedev/test-services-ruby"
 RESTATE_IMAGE="${RESTATE_CONTAINER_IMAGE:-ghcr.io/restatedev/restate:main}"
 REPORT_DIR="${REPO_ROOT}/tmp/test-report"
@@ -55,7 +55,7 @@ docker run --rm \
   -v "${REPORT_DIR}:/opt/test-report" \
   -e RESTATE_CONTAINER_IMAGE="${RESTATE_IMAGE}" \
   --network host \
-  eclipse-temurin:21-jre \
+  eclipse-temurin:25-jre \
   java -jar /opt/test-suite.jar run \
     --exclusions-file=/opt/exclusions.yaml \
     --service-container-env-file=/opt/service.env \

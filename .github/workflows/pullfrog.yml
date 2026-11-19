@@ -29,9 +29,9 @@ jobs:
 
       # Restate: give the agent a build environment matching CI
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1.335.0
+        uses: ruby/setup-ruby@v1.342.0
         with:
-          ruby-version: "3.3"
+          ruby-version: "4.0.10"
           bundler-cache: true
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

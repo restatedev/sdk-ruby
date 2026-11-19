@@ -1,5 +1,5 @@
 # ── Build stage: compile native extension ──
-FROM ruby:3.3-bookworm AS build-sdk
+FROM ruby:4.0.10-bookworm AS build-sdk
 
 # Install Rust toolchain and build dependencies
 RUN apt-get update -y && \
@@ -24,7 +24,7 @@ COPY LICENSE ./
 RUN bundle install && bundle exec rake compile
 
 # ── Runtime stage ──
-FROM ruby:3.3-slim-bookworm AS test-services
+FROM ruby:4.0.10-slim-bookworm AS test-services
 
 # Install build tools and OpenSSL dev headers for native gem extensions
 RUN apt-get update -y && \

@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable Style/EmptyMethod
+# rubocop:disable-next Style/EmptyMethod
 module Restate
   # Signals when the current invocation attempt has finished — either the handler
   # completed, the connection was lost, or a transient error occurred.
@@ -264,4 +264,3 @@ module Restate
     def reject_promise(name, message, code: 500); end
   end
 end
-# rubocop:enable Style/EmptyMethod

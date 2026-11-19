@@ -6,9 +6,10 @@
 # directories that don't exist inside the container.
 export PATH="/usr/local/bundle/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export GEM_HOME="/usr/local/bundle"
-export GEM_PATH="/usr/local/bundle"
 export BUNDLE_APP_CONFIG="/usr/local/bundle"
-unset BUNDLE_GEMFILE BUNDLE_PATH BUNDLE_BIN BUNDLE_WITHOUT RUBY_VERSION
+# GEM_PATH is unset (not pinned) so RubyGems falls back to GEM_HOME plus Ruby's own
+# gem dir, which holds bundled gems such as base64 on Ruby >= 3.4.
+unset GEM_PATH BUNDLE_GEMFILE BUNDLE_PATH BUNDLE_BIN BUNDLE_WITHOUT RUBY_VERSION
 
 PORT=${PORT:-"9080"}
 

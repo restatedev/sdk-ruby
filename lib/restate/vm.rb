@@ -3,7 +3,7 @@
 
 begin
   # Cross-compiled native gems place the binary in a version-specific directory
-  # e.g., lib/restate/3.3/restate_internal.bundle
+  # e.g., lib/restate/4.0/restate_internal.bundle
   RUBY_VERSION =~ /(\d+\.\d+)/
   require_relative "#{Regexp.last_match(1)}/restate_internal"
 rescue LoadError
