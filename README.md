@@ -110,7 +110,7 @@ We know that your time is precious and, therefore, deeply value any effort to co
 * Ruby >= 3.1
 * [Rust toolchain](https://rustup.rs/)
 * Docker (for integration tests)
-* Java 21+ (for sdk-test-suite integration tests)
+* Docker is all the sdk-test-suite integration tests need (the suite runs in a Java container)
 
 Install dependencies and build:
 
@@ -125,7 +125,7 @@ Run the full verification suite (build, lint, typecheck, tests):
 make verify
 ```
 
-Run integration tests (requires Docker + Java 21+):
+Run integration tests (requires Docker):
 
 ```shell
 make test-integration

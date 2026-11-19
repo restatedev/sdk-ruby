@@ -1163,7 +1163,7 @@ bundle exec falcon serve --bind http://0.0.0.0:9080
 ### Docker
 
 ```dockerfile
-FROM ruby:3.3-slim-bookworm
+FROM ruby:4.0-slim-bookworm
 RUN apt-get update && apt-get install -y build-essential curl clang \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 WORKDIR /app

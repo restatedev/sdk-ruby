@@ -1,7 +1,7 @@
 [package]
 name = "restate_internal"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 publish = false
 
 [lib]
@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 doc = false
 
 [dependencies]
-magnus = { version = "0.8", features = ["rb-sys"] }
+magnus = { version = "0.9", features = ["rb-sys"] }
 rb-sys = { version = "0.9", features = ["stable-api-compiled-fallback"] }
-restate-sdk-shared-core = { version = "8.2.0" , features = ["request_identity", "sha2_random_seed", "rust_crypto"] }
+restate-sdk-shared-core = { version = "8.7.1", features = ["request_identity", "sha2_random_seed", "rust_crypto"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }

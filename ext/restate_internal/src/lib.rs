@@ -1,13 +1,12 @@
 use magnus::{
-    function, method,
-    value::ReprValue,
     Error, ExceptionClass, Module, Object, RArray, RString, Ruby, Symbol, TryConvert, Value,
+    function, method, value::ReprValue,
 };
 use restate_sdk_shared_core::{
-    AwaitResponse, CallHandle, CoreVM, Error as CoreError, Header, IdentityVerifier, Input,
-    NonEmptyValue, NotificationHandle, OnMaxAttempts, ResponseHead, RetryPolicy, RunExitResult,
-    RunHandle, State, Target, TerminalFailure, UnresolvedFuture, VMOptions, Value as CoreValue,
-    VM, CANCEL_NOTIFICATION_HANDLE,
+    AwaitResponse, CANCEL_NOTIFICATION_HANDLE, CallHandle, CoreVM, Error as CoreError, Header,
+    IdentityVerifier, Input, NonEmptyValue, NotificationHandle, OnMaxAttempts, ResponseHead,
+    RetryPolicy, RunExitResult, RunHandle, State, Target, TerminalFailure, UnresolvedFuture, VM,
+    VMOptions, Value as CoreValue,
 };
 use std::cell::RefCell;
 use std::fmt;
@@ -30,7 +29,10 @@ static IDENTITY_KEY_ERROR_CLASS: OnceLock<SyncExceptionClass> = OnceLock::new();
 static IDENTITY_VERIFICATION_ERROR_CLASS: OnceLock<SyncExceptionClass> = OnceLock::new();
 
 fn vm_error_class() -> ExceptionClass {
-    VM_ERROR_CLASS.get().expect("VM_ERROR_CLASS not initialized").0
+    VM_ERROR_CLASS
+        .get()
+        .expect("VM_ERROR_CLASS not initialized")
+        .0
 }
 
 fn identity_key_error_class() -> ExceptionClass {
@@ -420,8 +422,7 @@ impl RbVM {
             let v: String = pair.entry(1)?;
             hdr_vec.push((k, v));
         }
-        let vm =
-            CoreVM::new(hdr_vec, VMOptions::default()).map_err(core_error_to_magnus)?;
+        let vm = CoreVM::new(hdr_vec, VMOptions::default()).map_err(core_error_to_magnus)?;
         Ok(Self {
             vm: RefCell::new(vm),
         })
@@ -488,14 +489,10 @@ impl RbVM {
         match res {
             Err(e) if e.is_suspended_error() => Ok(ruby.into_value(RbSuspended)),
             Err(e) => Err(core_error_to_magnus(e)),
-            Ok(AwaitResponse::AnyCompleted) => {
-                Ok(ruby.into_value(RbDoProgressAnyCompleted))
-            }
-            Ok(AwaitResponse::ExecuteRun(handle)) => Ok(ruby.into_value(
-                RbDoProgressExecuteRun {
-                    handle: handle.into(),
-                },
-            )),
+            Ok(AwaitResponse::AnyCompleted) => Ok(ruby.into_value(RbDoProgressAnyCompleted)),
+            Ok(AwaitResponse::ExecuteRun(handle)) => Ok(ruby.into_value(RbDoProgressExecuteRun {
+                handle: handle.into(),
+            })),
             Ok(AwaitResponse::CancelSignalReceived) => {
                 Ok(ruby.into_value(RbDoProgressCancelSignalReceived))
             }
@@ -528,9 +525,7 @@ impl RbVM {
             Ok(Some(CoreValue::Void)) => Ok(ruby.into_value(RbVoid)),
             Ok(Some(CoreValue::Success(b))) => Ok(ruby.str_from_slice(&b).as_value()),
             Ok(Some(CoreValue::Failure(f))) => Ok(ruby.into_value(RbFailure::from(f))),
-            Ok(Some(CoreValue::StateKeys(keys))) => {
-                Ok(ruby.into_value(RbStateKeys { keys }))
-            }
+            Ok(Some(CoreValue::StateKeys(keys))) => Ok(ruby.into_value(RbStateKeys { keys })),
             Ok(Some(CoreValue::InvocationId(id))) => Ok(ruby.str_new(&id).as_value()),
         }
     }
@@ -755,7 +750,11 @@ impl RbVM {
         .map_err(core_error_to_magnus)
     }
 
-    fn propose_run_completion_failure(&self, handle: u32, failure: &RbFailure) -> Result<(), Error> {
+    fn propose_run_completion_failure(
+        &self,
+        handle: u32,
+        failure: &RbFailure,
+    ) -> Result<(), Error> {
         self.vm
             .borrow_mut()
             .propose_run_completion(
@@ -868,16 +867,16 @@ impl RbVM {
         let bytes: Vec<u8> = unsafe { buffer.as_slice().to_vec() };
         self.vm
             .borrow_mut()
-            .sys_complete_promise(key, NonEmptyValue::Success(bytes.into()), Default::default())
+            .sys_complete_promise(
+                key,
+                NonEmptyValue::Success(bytes.into()),
+                Default::default(),
+            )
             .map(Into::into)
             .map_err(core_error_to_magnus)
     }
 
-    fn sys_complete_promise_failure(
-        &self,
-        key: String,
-        failure: &RbFailure,
-    ) -> Result<u32, Error> {
+    fn sys_complete_promise_failure(&self, key: String, failure: &RbFailure) -> Result<u32, Error> {
         self.vm
             .borrow_mut()
             .sys_complete_promise(
@@ -974,7 +973,7 @@ impl RbIdentityVerifier {
 
 // ── Error formatter ──
 
-use restate_sdk_shared_core::fmt::{set_error_formatter, ErrorFormatter};
+use restate_sdk_shared_core::fmt::{ErrorFormatter, set_error_formatter};
 
 #[derive(Debug)]
 struct RubyErrorFormatter;
@@ -1037,7 +1036,10 @@ fn parse_unresolved_future(value: Value) -> Result<UnresolvedFuture, Error> {
         children.push(parse_unresolved_future(child)?);
     }
     let tag_name = tag.name().map_err(|_| {
-        Error::new(ruby.exception_arg_error(), "UnresolvedFuture tag is not a Symbol")
+        Error::new(
+            ruby.exception_arg_error(),
+            "UnresolvedFuture tag is not a Symbol",
+        )
     })?;
     match tag_name.as_ref() {
         "first_completed" => Ok(UnresolvedFuture::FirstCompleted(children)),
@@ -1112,13 +1114,25 @@ fn rb_exponential_retry_config_new(
     factor: Value,
 ) -> RbExponentialRetryConfig {
     let to_opt_u64 = |v: Value| -> Option<u64> {
-        if v.is_nil() { None } else { u64::try_convert(v).ok() }
+        if v.is_nil() {
+            None
+        } else {
+            u64::try_convert(v).ok()
+        }
     };
     let to_opt_u32 = |v: Value| -> Option<u32> {
-        if v.is_nil() { None } else { u32::try_convert(v).ok() }
+        if v.is_nil() {
+            None
+        } else {
+            u32::try_convert(v).ok()
+        }
     };
     let to_opt_f64 = |v: Value| -> Option<f64> {
-        if v.is_nil() { None } else { f64::try_convert(v).ok() }
+        if v.is_nil() {
+            None
+        } else {
+            f64::try_convert(v).ok()
+        }
     };
     RbExponentialRetryConfig {
         initial_interval: to_opt_u64(initial_interval),
@@ -1191,13 +1205,23 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
 
     // ExponentialRetryConfig - constructor takes all 5 params (nil for unset)
     let erc_class = internal.define_class("ExponentialRetryConfig", ruby.class_object())?;
-    erc_class
-        .define_singleton_method("new", function!(rb_exponential_retry_config_new, 5))?;
-    erc_class
-        .define_method("initial_interval", method!(RbExponentialRetryConfig::initial_interval, 0))?;
-    erc_class.define_method("max_attempts", method!(RbExponentialRetryConfig::max_attempts, 0))?;
-    erc_class.define_method("max_duration", method!(RbExponentialRetryConfig::max_duration, 0))?;
-    erc_class.define_method("max_interval", method!(RbExponentialRetryConfig::max_interval, 0))?;
+    erc_class.define_singleton_method("new", function!(rb_exponential_retry_config_new, 5))?;
+    erc_class.define_method(
+        "initial_interval",
+        method!(RbExponentialRetryConfig::initial_interval, 0),
+    )?;
+    erc_class.define_method(
+        "max_attempts",
+        method!(RbExponentialRetryConfig::max_attempts, 0),
+    )?;
+    erc_class.define_method(
+        "max_duration",
+        method!(RbExponentialRetryConfig::max_duration, 0),
+    )?;
+    erc_class.define_method(
+        "max_interval",
+        method!(RbExponentialRetryConfig::max_interval, 0),
+    )?;
     erc_class.define_method("factor", method!(RbExponentialRetryConfig::factor, 0))?;
 
     // Progress types

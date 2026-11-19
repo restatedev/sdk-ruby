@@ -63,7 +63,8 @@ jobs:
 
       - uses: oxidize-rb/actions/setup-ruby-and-rust@v1.5.0
         with:
-          ruby-version: "3.3"
+          # Host Ruby only drives rb-sys-dock; resolved via a locked setup-ruby-pkgs
+          ruby-version: "4.0"
           bundler-cache: true
           cargo-cache: true
           cache-version: v1
@@ -84,9 +85,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4.4.0
 
-      - uses: ruby/setup-ruby@v1.335.0
+      - uses: ruby/setup-ruby@v1.342.0
         with:
-          ruby-version: "3.3"
+          ruby-version: "4.0.10"
 
       - name: Build source gem
         run: gem build restate-sdk.gemspec
@@ -117,9 +118,9 @@ jobs:
       - name: List gems
         run: ls -la gems/
 
-      - uses: ruby/setup-ruby@v1.335.0
+      - uses: ruby/setup-ruby@v1.342.0
         with:
-          ruby-version: "3.3"
+          ruby-version: "4.0.10"
 
       - name: Configure trusted publisher credentials
         uses: rubygems/configure-rubygems-credentials@v1.0.0

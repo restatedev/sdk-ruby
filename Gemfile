@@ -10,7 +10,6 @@ gem 'rake-compiler', '~> 1.2'
 gem 'rb_sys', '~> 0.9'
 
 group :development, :test do
-  gem 'base64'
   gem 'dry-struct', require: false
   gem 'falcon', '~> 0.47', require: false
   gem 'rspec', '~> 3.12'

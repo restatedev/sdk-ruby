@@ -6,7 +6,7 @@ workflows:
     '.github/workflows/ci.yaml':
         - 'actions/checkout@v4.4.0'
         - 'dtolnay/rust-toolchain@stable'
-        - 'ruby/setup-ruby@v1.335.0'
+        - 'ruby/setup-ruby@v1.342.0'
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/docker.yaml':
         - 'actions/checkout@v4.4.0'
@@ -28,14 +28,14 @@ workflows:
         - 'actions/checkout@v6.1.0'
         - 'dtolnay/rust-toolchain@stable'
         - 'pullfrog/pullfrog@v0.1.110'
-        - 'ruby/setup-ruby@v1.335.0'
+        - 'ruby/setup-ruby@v1.342.0'
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/release.yml':
         - 'actions/checkout@v4.4.0'
         - 'actions/download-artifact@v4.3.0'
         - 'actions/upload-artifact@v4.6.2'
         - 'oxidize-rb/actions@v1.5.0'
-        - 'ruby/setup-ruby@v1.335.0'
+        - 'ruby/setup-ruby@v1.342.0'
         - 'rubygems/configure-rubygems-credentials@v1.0.0'
     '.github/workflows/verify-lockfile.yml': []
 dependencies:
@@ -136,7 +136,7 @@ dependencies:
         repo_id: 260749683
     'dtolnay/rust-toolchain@stable':
         ref: 'stable'
-        commit: 'sha1-b725eda525362e7cf34af9a7243cac1e3f01a7ec'
+        commit: 'sha1-39008827e6b4319a349e9a42dfc90579dd25f1ca'
         owner_id: 1940490
         repo_id: 260749683
     'enricomi/publish-unit-test-result-action@v2':
@@ -179,9 +179,9 @@ dependencies:
         commit: 'sha1-2233d39c1315c667a2970436418b520a6300124e'
         owner_id: 210414
         repo_id: 243428768
-    'ruby/setup-ruby@v1.335.0':
-        ref: 'v1.335.0'
-        commit: 'sha1-7f797815d8adceb1c412e7abefdd1ab4abc47a5f'
+    'ruby/setup-ruby@v1.342.0':
+        ref: 'v1.342.0'
+        commit: 'sha1-f9c4492e86def3e644ab32a0ef185eda5b0c20d0'
         owner_id: 210414
         repo_id: 231208785
     'rubygems/configure-rubygems-credentials@v1.0.0':
