@@ -4,7 +4,7 @@ A minimal template for building [Restate](https://restate.dev/) services in Ruby
 
 ## Prerequisites
 
-- Ruby >= 3.1
+- Ruby >= 3.3
 - [Restate Server](https://docs.restate.dev/develop/local_dev) running locally
 
 ## Getting started

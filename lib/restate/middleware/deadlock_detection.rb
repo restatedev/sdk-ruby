@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require 'base64'
-require 'set'
 
 module Restate
   module Middleware

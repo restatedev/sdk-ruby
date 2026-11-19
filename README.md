@@ -42,7 +42,7 @@ end
 ## Using the SDK
 
 **Prerequisites:**
-- Ruby >= 3.1
+- Ruby >= 3.3
 
 For brand-new projects, we recommend using the [Restate Ruby Template](template/):
 
@@ -107,7 +107,7 @@ We know that your time is precious and, therefore, deeply value any effort to co
 
 ### Local development
 
-* Ruby >= 3.1
+* Ruby >= 3.3
 * [Rust toolchain](https://rustup.rs/)
 * Docker (for integration tests)
 * Docker is all the sdk-test-suite integration tests need (the suite runs in a Java container)

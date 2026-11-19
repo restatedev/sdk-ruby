@@ -1,5 +1,5 @@
 AllCops:
-  TargetRubyVersion: 3.1
+  TargetRubyVersion: 3.3
   NewCops: enable
   SuggestExtensions: false
   Exclude:
@@ -16,6 +16,11 @@ Layout/LineLength:
 
 Style/Documentation:
   Enabled: false
+
+# Keep named **opts on the public DSL (handler, shared, workflow, ...) so the
+# YARD @param docs and error messages can refer to it.
+Style/ArgumentsForwarding:
+  UseAnonymousForwarding: false
 
 # Mirror the native Rust API naming (is_* methods come from the Rust VM)
 Naming/PredicatePrefix:
