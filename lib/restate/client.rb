@@ -158,7 +158,7 @@ module Restate
     def initialize(base_url, service_name, key, headers)
       @base_url = base_url
       @service_name = service_name
-      @key = key
+      @key = key ? URI.encode_www_form_component(key.to_s).gsub('+', '%20') : nil
       @headers = headers
     end
 
