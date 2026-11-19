@@ -16,6 +16,10 @@ env:
 jobs:
   build-ruby-services-docker-image:
     runs-on: ubuntu-latest
+    # Push to ghcr.io needs packages: write; the org default token is read-only.
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.4.0
