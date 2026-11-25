@@ -123,7 +123,7 @@ module Restate
       request = Net::HTTP::Post.new(uri)
       request['Content-Type'] = 'application/json'
       @ingress_headers.each { |k, v| request[k] = v }
-      request.body = JSON.generate(body) if body
+      request.body = JSON.generate(body) unless body.nil?
       response = Net::HTTP.start(uri.hostname, uri.port, # steep:ignore ArgumentTypeMismatch
                                  use_ssl: uri.scheme == 'https',
                                  read_timeout: 30) { |http| http.request(request) }
